@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # MGXBench — Multi-GPU Execution Benchmark
 
 **Distributed matrix multiplication | GPU communication | Domain decomposition | Performance evaluation**
@@ -241,3 +242,6 @@ Neither command removes `results/`. Delete a specific result directory explicitl
 
 **MGXBench — Multi-GPU Execution Benchmark**  
 *Current workload: Distributed Multi-GPU Matrix Multiplication*
+=======
+# MGXBench
+>>>>>>> 88da4ab27371c9e6199b7d1760c0158e8b0582e6
