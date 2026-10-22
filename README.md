@@ -117,6 +117,7 @@ The documented reference environment is the **Santos Dumont (SDumont) supercompu
 Example SDumont modules inicialization:
 
 ```bash
+module load anaconda3/2020.07_sequana 
 module load gcc/9.3_sequana
 module load cuda/11.2_sequana
 module load openmpi/gnu/4.1.4+cuda-11.2_sequana
