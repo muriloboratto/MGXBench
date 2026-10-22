@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # MGXBench — Multi-GPU Execution Benchmark
 
 **Distributed matrix multiplication | GPU communication | Domain decomposition | Performance evaluation**
