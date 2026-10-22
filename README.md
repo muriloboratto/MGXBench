@@ -236,11 +236,3 @@ rm -rf build
 ```
 
 Neither command removes `results/`. Delete a specific result directory explicitly if you intend to discard its reports.
-
----
-
-**MGXBench — Multi-GPU Execution Benchmark**  
-*Current workload: Distributed Multi-GPU Matrix Multiplication*
-=======
-# MGXBench
->>>>>>> 88da4ab27371c9e6199b7d1760c0158e8b0582e6
