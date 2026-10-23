@@ -1,6 +1,6 @@
 # MGXBench — Multi-GPU Execution Benchmark
 
-**Distributed matrix multiplication | GPU communication | Domain decomposition | Performance evaluation**
+**Benchmark performance evaluation | Distributed matrix multiplication | GPU communication | Domain decomposition | **
 
 MGXBench is a C++/CUDA benchmark for evaluating the execution performance of distributed matrix multiplication on multiple NVIDIA GPUs. Its current workload compares **1D Row-Block** and **2D Block/SUMMA** decompositions using **MPI, CUDA-aware MPI, NCCL, and NVSHMEM** communication strategies. The benchmark investigates how data distribution, communication mechanisms, and communication–computation overlap affect execution time and throughput.
 
@@ -25,7 +25,7 @@ MGXBench evaluates two complementary dimensions of distributed GPU execution:
 - **Data decomposition:** how matrices are partitioned and assigned to GPUs.
 - **Communication model:** how matrix data is transferred and whether communication can overlap GPU computation.
 
-The workload is dense matrix multiplication, **C = A × B**, with square matrices of order **N**. The Python runner (`benchmark.py`) orchestrates repeated runs of the CUDA executables, records timings and validation results, and exports CSV/JSON summaries.
+The workload is dense matrix multiplication, $C = A × B$, with square matrices of order $N$. The Python runner (`benchmark.py`) orchestrates repeated runs of the CUDA executables, records timings and validation results, and exports CSV/JSON summaries.
 
 ## Domain decomposition
 
@@ -69,9 +69,9 @@ The terms *asynchronous* and *overlap* describe the implementations' **intended 
 
 ![Communication models](img/communication-models.png)
 
-## Communication–computation overlap
+## Communication–computation overlap approaches
 
-| Synchronous approach | Asynchronous / pipelined approach |
+| Synchronous  | Asynchronous |
 |---|---|
 | Communication completes before GEMM begins | Data may be transferred in chunks |
 | Communication → GEMM | Communication ↔ GEMM |
@@ -108,22 +108,22 @@ The `build/` and `results/` directories are created locally and are not required
 
 The documented reference environment is the **Santos Dumont (SDumont) supercomputer**, using **NVIDIA V100** GPUs with CUDA compute capability **7.0 (`sm_70`)**.
 
-- Linux and Python 3
-- CMake 3.22 or newer (a version compatible with the selected compiler runtime)
-- GCC 9.3 and CUDA 11.2
-- CUDA-enabled OpenMPI 4.1.4
-- NCCL 2.13 and NVSHMEM 3.1.7
+- Linux and Python 3,
+- CMake 3.22 or newer (a version compatible with the selected compiler runtime),
+- GCC 9.3 and CUDA 11.2,
+- CUDA-enabled OpenMPI 4.1.4,
+- NCCL 2.13 and NVSHMEM 3.1.7,
 
-Example SDumont modules inicialization:
+Example SDumont modules initialization:
 
 ```bash
 module load anaconda3/2020.07_sequana 
+module load nvshmem/3.1.7_cuda-11.2_sequana
+module load cmake/3.30.3_sequana
 module load gcc/9.3_sequana
 module load cuda/11.2_sequana
 module load openmpi/gnu/4.1.4+cuda-11.2_sequana
 module load nccl/2.13_cuda-11.2_sequana
-module load nvshmem/3.1.7_cuda-11.2_sequana
-module load cmake/3.30.3_sequana
 ```
 
 Ensure the selected CUDA toolkit, GCC compiler, MPI implementation, and CMake executable are mutually compatible.
@@ -144,13 +144,7 @@ bash install.sh --clean
 
 ## Running MGXBench
 
-**Run within a GPU allocation**, following the cluster scheduler's policies. For the examples below, request **four visible GPUs on one node**, and verify GPU visibility:
-
-```bash
-nvidia-smi
-```
-
-The current execution setup associates ranks with GPU indices on the same node; it is **not a general multi-node launcher**.
+**Run within a GPU allocation**, following the cluster scheduler's policies. For the examples below, request **four visible GPUs on one node**. The current execution setup associates ranks with GPU indices on the same node; it is **not a general multi-node launcher**.
 
 ### 1D Row-Block — 4 GPUs
 
@@ -213,14 +207,6 @@ $$
 $$
 
 The reported time is measured by the C++/CUDA application's computation/communication region, **not the complete MPI process launch**.
-
-## Validation and interpretation
-
-- The original implementation validates numerical results using **constant-valued matrices**. This is useful for regression checks but is not equivalent to testing arbitrary matrix contents.
-- The **1D implementation internally averages 10 iterations**, whereas the **2D implementation measures one execution**. Direct comparisons of absolute timings between decomposition schemes therefore require care.
-- Results depend on matrix size, GPU model, number of ranks, communication stack, memory transfers, and synchronization behavior.
-- The `validated` result indicates whether the implementation passed its current numerical check; it does not establish comprehensive numerical correctness for all inputs.
-- Confirm successful compilation and run correctness on the target cluster before publishing comparative performance claims.
 
 ## Cleaning the build
 
