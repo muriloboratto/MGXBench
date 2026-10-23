@@ -1,6 +1,6 @@
 # MGXBench — Multi-GPU Execution Benchmark
 
-**Benchmark performance evaluation | Distributed matrix multiplication | GPU communication | Domain decomposition | **
+**Benchmark performance evaluation | Distributed matrix multiplication | GPU communication | Domain decomposition**
 
 MGXBench is a C++/CUDA benchmark for evaluating the execution performance of distributed matrix multiplication on multiple NVIDIA GPUs. Its current workload compares **1D Row-Block** and **2D Block/SUMMA** decompositions using **MPI, CUDA-aware MPI, NCCL, and NVSHMEM** communication strategies. The benchmark investigates how data distribution, communication mechanisms, and communication–computation overlap affect execution time and throughput.
 
