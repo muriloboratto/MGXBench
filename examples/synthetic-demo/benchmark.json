@@ -1,0 +1,330 @@
+{
+  "schema_version": 2,
+  "label": "SYNTHETIC-demo",
+  "environment": {
+    "id": "SYNTHETIC-not-hardware"
+  },
+  "measurement": "SYNTHETIC DATA \u2014 not experimental evidence",
+  "results": [
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "MMM",
+      "size": 1024,
+      "ranks": 1,
+      "mean_s": 0.1,
+      "stddev_s": 0.001,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.099,
+        0.1,
+        0.101
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "NNN",
+      "size": 1024,
+      "ranks": 1,
+      "mean_s": 0.06999999999999999,
+      "stddev_s": 0.0007,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.06929999999999999,
+        0.06999999999999999,
+        0.0707
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "MMM",
+      "size": 2048,
+      "ranks": 1,
+      "mean_s": 0.8,
+      "stddev_s": 0.008,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.792,
+        0.8,
+        0.808
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "NNN",
+      "size": 2048,
+      "ranks": 1,
+      "mean_s": 0.5599999999999999,
+      "stddev_s": 0.0056,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.5543999999999999,
+        0.5599999999999999,
+        0.5656
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "MMM",
+      "size": 1024,
+      "ranks": 4,
+      "mean_s": 0.03025,
+      "stddev_s": 0.0003025,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.0299475,
+        0.03025,
+        0.0305525
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "NNN",
+      "size": 1024,
+      "ranks": 4,
+      "mean_s": 0.021174999999999996,
+      "stddev_s": 0.00021174999999999997,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.020963249999999996,
+        0.021174999999999996,
+        0.021386749999999996
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "MMM",
+      "size": 2048,
+      "ranks": 4,
+      "mean_s": 0.242,
+      "stddev_s": 0.00242,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.23958,
+        0.242,
+        0.24442
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "NNN",
+      "size": 2048,
+      "ranks": 4,
+      "mean_s": 0.16939999999999997,
+      "stddev_s": 0.0016939999999999998,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.16770599999999997,
+        0.16939999999999997,
+        0.17109399999999997
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "2d",
+      "library": "MMM",
+      "size": 1024,
+      "ranks": 1,
+      "mean_s": 0.09000000000000001,
+      "stddev_s": 0.0009000000000000001,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.08910000000000001,
+        0.09000000000000001,
+        0.09090000000000001
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "2d",
+      "library": "NNN",
+      "size": 1024,
+      "ranks": 1,
+      "mean_s": 0.063,
+      "stddev_s": 0.00063,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.06237,
+        0.063,
+        0.06363
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "2d",
+      "library": "MMM",
+      "size": 2048,
+      "ranks": 1,
+      "mean_s": 0.7200000000000001,
+      "stddev_s": 0.007200000000000001,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.7128000000000001,
+        0.7200000000000001,
+        0.7272000000000001
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "2d",
+      "library": "NNN",
+      "size": 2048,
+      "ranks": 1,
+      "mean_s": 0.504,
+      "stddev_s": 0.00504,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.49896,
+        0.504,
+        0.50904
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "2d",
+      "library": "MMM",
+      "size": 1024,
+      "ranks": 4,
+      "mean_s": 0.027225000000000003,
+      "stddev_s": 0.00027225000000000003,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.02695275,
+        0.027225000000000003,
+        0.027497250000000004
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "2d",
+      "library": "NNN",
+      "size": 1024,
+      "ranks": 4,
+      "mean_s": 0.019057499999999998,
+      "stddev_s": 0.00019057499999999998,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.018866924999999996,
+        0.019057499999999998,
+        0.019248075
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "2d",
+      "library": "MMM",
+      "size": 2048,
+      "ranks": 4,
+      "mean_s": 0.21780000000000002,
+      "stddev_s": 0.0021780000000000002,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.215622,
+        0.21780000000000002,
+        0.21997800000000003
+      ]
+    },
+    {
+      "label": "SYNTHETIC-demo",
+      "decomposition": "2d",
+      "library": "NNN",
+      "size": 2048,
+      "ranks": 4,
+      "mean_s": 0.15245999999999998,
+      "stddev_s": 0.0015245999999999999,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.15093539999999997,
+        0.15245999999999998,
+        0.1539846
+      ]
+    },
+    {
+      "label": "weak:SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "MMM",
+      "size": 1024,
+      "ranks": 1,
+      "mean_s": 0.1,
+      "stddev_s": 0.001,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.099,
+        0.1,
+        0.101
+      ]
+    },
+    {
+      "label": "weak:SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "NNN",
+      "size": 1024,
+      "ranks": 1,
+      "mean_s": 0.06999999999999999,
+      "stddev_s": 0.0007,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.06929999999999999,
+        0.06999999999999999,
+        0.0707
+      ]
+    },
+    {
+      "label": "weak:SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "MMM",
+      "size": 2048,
+      "ranks": 8,
+      "mean_s": 0.149,
+      "stddev_s": 0.00149,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.14751,
+        0.149,
+        0.15048999999999998
+      ]
+    },
+    {
+      "label": "weak:SYNTHETIC-demo",
+      "decomposition": "1d",
+      "library": "NNN",
+      "size": 2048,
+      "ranks": 8,
+      "mean_s": 0.10429999999999999,
+      "stddev_s": 0.0010429999999999999,
+      "original_inner_loops": 1,
+      "validated": true,
+      "samples_s": [
+        0.10325699999999999,
+        0.10429999999999999,
+        0.10534299999999999
+      ]
+    }
+  ]
+}

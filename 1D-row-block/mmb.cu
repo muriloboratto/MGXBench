@@ -154,7 +154,20 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
     MPI_Get_processor_name(name, &resultlen);
 
-    const int deviceId    = atoi(argv[1]);
+    int deviceId = atoi(argv[1]);
+    if (strcmp(argv[1], "auto") == 0) {
+        MPI_Comm local_comm;
+        MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, myRank, MPI_INFO_NULL, &local_comm);
+        int local_rank = 0, device_count = 0;
+        MPI_Comm_rank(local_comm, &local_rank);
+        cudaGetDeviceCount(&device_count);
+        if (device_count <= 0 || (device_count > 1 && local_rank >= device_count)) {
+            fprintf(stderr, "No unique visible GPU for local rank %d\n", local_rank);
+            MPI_Abort(MPI_COMM_WORLD, 3);
+        }
+        deviceId = device_count == 1 ? 0 : local_rank;
+        MPI_Comm_free(&local_comm);
+    }
     const int matrix_size = atoi(argv[2]);
 
     char communication_libraries[4] = {0, 0, 0, 0};
@@ -488,13 +501,26 @@ int main(int argc, char *argv[])
     if (uses_nvshmem)
         nvshmem_barrier_all();
 
-    const int loop_count = 10; /* original in-process averaging preserved */
+    const char *loops_env = getenv("MGXBENCH_INNER_LOOPS");
+    const int loop_count = loops_env ? atoi(loops_env) : 10;
+    if (loop_count < 1) MPI_Abort(MPI_COMM_WORLD, 4);
 
+    /* Optional in-process warmup. Keep the same MPI ranks and CUDA contexts.
+       The measured interval starts after all warmup iterations complete. */
+    const char *warmup_env = getenv("MGXBENCH_INTERNAL_WARMUP");
+    const int warmup_count = warmup_env ? atoi(warmup_env) : 0;
+    if (warmup_count < 0) MPI_Abort(MPI_COMM_WORLD, 4);
     MPI_Barrier(MPI_COMM_WORLD);
-    start_time = MPI_Wtime();
+    if (warmup_count == 0) start_time = MPI_Wtime();
 
-    for (int iter = 1; iter <= loop_count; ++iter) 
+    for (int iter = -warmup_count; iter < loop_count; ++iter) 
     {
+        if (iter == 0 && warmup_count > 0) {
+            cudaDeviceSynchronize();
+            if (uses_nvshmem) nvshmem_barrier_all();
+            MPI_Barrier(MPI_COMM_WORLD);
+            start_time = MPI_Wtime();
+        }
 
         /* ================================================================ */
         /* A: distribute rows                                               */
@@ -777,6 +803,8 @@ int main(int argc, char *argv[])
         }
     }
 
+    cudaDeviceSynchronize();
+    if (uses_nvshmem) nvshmem_barrier_all();
     MPI_Barrier(MPI_COMM_WORLD);
     stop_time = MPI_Wtime();
 

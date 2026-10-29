@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """MGXBench — Multi-GPU Execution Benchmark. Preserves the CUDA/MPI application."""
 import argparse,csv,json,math,os,pathlib,re,shlex,statistics,subprocess,sys,time
+from configuration.experiment import collect_environment, new_run, sample_statistics
 LIBRARY_NAMES = {
     'MMM': 'MPI-SYNC',
     'YYY': 'MPI-CHUNKED-ASYNC',
@@ -54,13 +55,26 @@ def main():
     ap.add_argument('--ranks',type=int,required=True)
     ap.add_argument('--libraries',nargs='+',default=['MMM','YYY','CCC','XXX','NNN','WWW','SSS'])
     ap.add_argument('--warmup',type=int,default=2)
+    ap.add_argument('--warmup-mode', choices=['external','internal'], default='external', help='Internal warmup is supported by 1D only')
+    ap.add_argument('--retries', type=int, default=0, help='Retries for transient launch/timeout failures (not validation failures)')
     ap.add_argument('--repeats',type=int,default=5)
     ap.add_argument('--launcher',default='mpirun')
     ap.add_argument('--launcher-args',default='')
     ap.add_argument('--build-dir',default='build')
     ap.add_argument('--output',default='results')
     ap.add_argument('--timeout',type=int,default=600)
+    ap.add_argument('--plot', action='store_true', help='Generate PNG/PDF and HTML report after measurement')
+    ap.add_argument('--inner-loops', type=int, default=1, help='1D internal iterations; 2D supports 1 only')
+    ap.add_argument('--environment', help='JSON hardware/topology/software metadata shared across a campaign')
+    ap.add_argument('--label', default='default', help='Experiment/campaign label')
+    ap.add_argument('--device-map', choices=['local','explicit'], default='local')
     args=ap.parse_args()
+    if args.retries < 0: ap.error('retries must be nonnegative')
+    if args.warmup_mode == 'internal' and args.decomposition != '1d': ap.error('internal warmup currently supports 1D only')
+    if args.inner_loops < 1 or (args.decomposition == '2d' and args.inner_loops != 1):
+        ap.error('inner-loops must be positive; 2D supports 1')
+    if any(lib not in LIBRARY_NAMES for lib in args.libraries) or len(set(args.libraries)) != len(args.libraries):
+        ap.error('select distinct supported library codes')
     if args.size<=0 or args.ranks<=0 or args.repeats<=0 or args.warmup<0:ap.error('invalid size/ranks/repeats/warmup')
     if args.size%args.ranks and args.decomposition=='1d':ap.error('1D requires size divisible by ranks')
     if args.decomposition=='2d' and math.isqrt(args.ranks)**2!=args.ranks:ap.error('2D SUMMA requires perfect square rank count')
@@ -69,28 +83,46 @@ def main():
         if len(lib)!=3 or any(c not in 'MYCXNSW' for c in lib):ap.error('invalid three-character library code: '+lib)
     exe=pathlib.Path(args.build_dir).resolve()/('mm_1d' if args.decomposition=='1d' else 'mm_2d')
     if not exe.is_file():ap.error('missing executable: '+str(exe)+'; first run cmake -S . -B build and cmake --build build -j 4, and check the build output')
-    dest=pathlib.Path(args.output);dest.mkdir(parents=True,exist_ok=True)
+    environment = collect_environment(args.environment, args.build_dir)
+    dest, run_id = new_run(args.output)
+    child_env = os.environ.copy()
+    child_env['MGXBENCH_INNER_LOOPS'] = str(args.inner_loops)
+    child_env['MGXBENCH_INTERNAL_WARMUP'] = str(args.warmup if args.warmup_mode == 'internal' else 0)
     results=[]; failures=[]
     print('\nMGXBench — Multi-GPU Execution Benchmark')
     print(f'Running {args.decomposition.upper()} matrix multiplication, N={args.size}, GPUs={args.ranks}\n', flush=True)
     for lib in args.libraries:
         samples=[]; runs=[]
-        for rep in range(-args.warmup,args.repeats):
+        for rep in range(-args.warmup if args.warmup_mode == 'external' else 0,args.repeats):
             # Open MPI MPMD syntax preserves explicit rank->GPU mapping in original code.
             command=shlex.split(args.launcher)+shlex.split(args.launcher_args)
             for rank in range(args.ranks):
                 if rank:command+=[':']
-                command+=['-np','1',str(exe),str(rank),str(args.size),lib]
+                command+=['-np','1',str(exe),('auto' if args.device_map == 'local' else str(rank)),str(args.size),lib]
             stage = f'warmup {rep + args.warmup + 1}/{args.warmup}' if rep < 0 else f'run {rep + 1}/{args.repeats}'
             print(f'[{lib:3}] {LIBRARY_NAMES.get(lib, lib):<22} {stage:<15}', flush=True)
+            output = ''
             try:
-                proc=subprocess.run(command,capture_output=True,text=True,timeout=args.timeout)
-                output=proc.stdout+'\n'+proc.stderr
+                for attempt in range(args.retries + 1):
+                    try:
+                        proc=subprocess.run(command,capture_output=True,text=True,timeout=args.timeout, env=child_env)
+                    except subprocess.TimeoutExpired:
+                        if attempt == args.retries: raise
+                        print(f'  timeout; retry {attempt + 1}/{args.retries}', file=sys.stderr)
+                        continue
+                    output=proc.stdout+'\n'+proc.stderr
+                    if proc.returncode != 0 and 'BENCHMARK_RESULT' not in output and attempt < args.retries:
+                        print(f'  launcher failure; retry {attempt + 1}/{args.retries}', file=sys.stderr)
+                        continue
+                    break
                 record=parse_result(output)
+                (dest / f'{lib}_{rep}.log').write_text(output)
                 valid=proc.returncode==0 and record['valid']=='1'
                 if not valid:raise RuntimeError(f'validation/exit failed: exit={proc.returncode}, valid={record["valid"]}')
                 if int(record['size'])!=args.size or int(record['ranks'])!=args.ranks or record['library']!=lib:
                     raise RuntimeError('metadata mismatch')
+                if record.get('decomposition', '').lower() != args.decomposition or int(record.get('loops', 0)) != args.inner_loops:
+                    raise RuntimeError('decomposition/inner-loop metadata mismatch')
                 elapsed=float(record['seconds'])
                 if not math.isfinite(elapsed) or elapsed<=0:raise RuntimeError('invalid time')
                 if rep>=0:
@@ -114,22 +146,29 @@ def main():
             'ranks':args.ranks,'mean_s':avg,'median_s':statistics.median(samples),
             'p95_s':pct(.95),'stddev_s':statistics.pstdev(samples),
             'gflops':gflops,'speedup_vs_MMM':None,'validated':True,
-            'samples_s':samples,'runs':runs,'original_inner_loops':10 if args.decomposition=='1d' else 1})
+            'samples_s':samples,'runs':runs,'original_inner_loops':args.inner_loops, 'seconds_semantics':'mean_seconds_per_multiplication', **sample_statistics(samples)})
     baseline=next((r['mean_s'] for r in results if r['library']=='MMM'),None)
     for r in results:
         if baseline:r['speedup_vs_MMM']=baseline/r['mean_s']
-    metadata={'schema_version':1,'application':'distributed-multi-gpu-mm-domain-decomposition',
+    metadata={'run_id':run_id, 'label':args.label, 'environment':environment, 'schema_version':2,'application':'distributed-multi-gpu-mm-domain-decomposition',
         'measurement':'original MPI_Wtime computation/communication region; not process startup',
-        'note':'1D original internally averages 10 iterations per process launch; 2D runs one',
+        'note':'Independent measured process launches; warmups excluded. 1D inner loops configurable; 2D one iteration. seconds is mean time per multiplication.',
         'bandwidth':'not reported: actual communication bytes vary with backend and decomposition',
         'timestamp_utc':__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
         'benchmark_name':'MGXBench', 'benchmark_full_name':'Multi-GPU Execution Benchmark',
         'command_args':vars(args),'results':results,'failures':failures}
+    for row in results:
+        row.update(run_id=run_id, label=args.label, environment_id=environment['id'])
     (dest/'benchmark.json').write_text(json.dumps(metadata,indent=2))
-    cols=['decomposition','library','size','ranks','mean_s','median_s','p95_s','stddev_s','gflops','speedup_vs_MMM','validated','original_inner_loops']
+    cols=['run_id','label','environment_id','cv_pct','ci95_low_s','ci95_high_s','decomposition','library','size','ranks','mean_s','median_s','p95_s','stddev_s','gflops','speedup_vs_MMM','validated','original_inner_loops','seconds_semantics']
     with (dest/'benchmark.csv').open('w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=cols);w.writeheader();w.writerows({k:r[k] for k in cols} for r in results)
     print_summary(results, failures, args, dest)
+    if args.plot and results:
+        plotted = subprocess.run([sys.executable, str(pathlib.Path(__file__).parent / 'configuration' / 'plot_benchmark.py'), '--input', str(dest), '--output', str(dest/'plots')])
+        if plotted.returncode:
+            print('Measurements saved; visualization failed. Install configuration/requirements-viz.txt and retry configuration/plot_benchmark.py.', file=sys.stderr)
+            return 3
     if failures or not results:return 2
     return 0
 if __name__=='__main__':sys.exit(main())

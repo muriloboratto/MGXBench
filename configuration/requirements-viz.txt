@@ -1,0 +1,4 @@
+numpy>=1.23,<2
+pandas>=1.5,<2.2
+matplotlib>=3.6
+numexpr==2.8.6

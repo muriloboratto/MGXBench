@@ -138,12 +138,27 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    const int device_id = atoi(argv[1]);
+    int device_id = atoi(argv[1]);
+    if (strcmp(argv[1], "auto") == 0) {
+        MPI_Comm local_comm;
+        MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, &local_comm);
+        int local_rank = 0, device_count = 0;
+        MPI_Comm_rank(local_comm, &local_rank);
+        cudaGetDeviceCount(&device_count);
+        if (device_count <= 0 || (device_count > 1 && local_rank >= device_count)) {
+            fprintf(stderr, "No unique visible GPU for local rank %d\n", local_rank);
+            MPI_Abort(MPI_COMM_WORLD, 3);
+        }
+        device_id = device_count == 1 ? 0 : local_rank;
+        MPI_Comm_free(&local_comm);
+    }
     const int N = atoi(argv[2]);
     const char *library = argv[3];
     const int q = (int)(sqrt((double)nranks) + 0.5);
 
     const int use_nvshmem = (strcmp(library, "WWW") == 0 || strcmp(library, "SSS") == 0);
+
+    cudaSetDevice(device_id);
 
     if (use_nvshmem)
     {

@@ -1,0 +1,13 @@
+{
+  "description": "TEMPLATE — replace with measured deployment details",
+  "nodes": null,
+  "gpus_per_node": null,
+  "gpu_model": null,
+  "interconnect": null,
+  "cuda_version": null,
+  "mpi_version": null,
+  "nccl_version": null,
+  "nvshmem_version": null,
+  "git_commit": null,
+  "build_flags": null
+}

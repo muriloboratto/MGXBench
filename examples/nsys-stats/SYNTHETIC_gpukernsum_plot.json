@@ -1,0 +1,9 @@
+{
+  "input": "/workspace/scratch/2ca6d0347620/work/MGXBench-v3/examples/nsys-stats/SYNTHETIC_gpukernsum.csv",
+  "report": null,
+  "valid_rows": 3,
+  "discarded_rows": 0,
+  "plotted_rows": 3,
+  "displayed_percent_sum": 100.0,
+  "note": "Original Nsight percentages retained; top selection is not renormalized. Kernel sums may include concurrent work. This does not measure wall time, GPU utilization or overlap."
+}

@@ -1,6 +1,20 @@
-# MGXBench — Multi-GPU Execution Benchmark
+<div align="center">
+    <img src="img/logo.png" width="800" style="max-width: 100%;">
+<!-- Technologies -->
+<!-- HPC Features -->
+    <p align="center">
+  <img alt="Version" src="https://img.shields.io/badge/version-1-blue?style=flat-square">
+  <img alt="C++ and CUDA" src="https://img.shields.io/badge/C++-CUDA-76B900?style=flat-square">
+  <img alt="Communication" src="https://img.shields.io/badge/communication-MPI%20%7C%20CUDA--Aware%20MPI%20%7C%20NCCL%20%7C%20NVSHMEM-00599C?style=flat-square">
+  <img alt="Visualization" src="https://img.shields.io/badge/plots-Python%20%7C%20Matplotlib-3776AB?style=flat-square">
+  <img alt="HPC" src="https://img.shields.io/badge/computing-HPC-8A2BE2?style=flat-square">
+  <img alt="Multi-GPU" src="https://img.shields.io/badge/architecture-Multi--GPU-76B900?style=flat-square">
+  <img alt="Benchmark" src="https://img.shields.io/badge/performance-Benchmarking-DC143C?style=flat-square">
+</p>
+</p>
 
-**Benchmark performance evaluation | Distributed matrix multiplication | GPU communication | Domain decomposition**
+</div>
+
 
 MGXBench is a C++/CUDA benchmark for evaluating the execution performance of distributed matrix multiplication on multiple NVIDIA GPUs. Its current workload compares **1D Row-Block** and **2D Block/SUMMA** decompositions using **MPI, CUDA-aware MPI, NCCL, and NVSHMEM** communication strategies. The benchmark investigates how data distribution, communication mechanisms, and communication–computation overlap affect execution time and throughput.
 
@@ -18,20 +32,20 @@ MGXBench is a C++/CUDA benchmark for evaluating the execution performance of dis
 10. [Validation and interpretation](#validation-and-interpretation)
 11. [Cleaning the build](#cleaning-the-build)
 
-## Benchmark design
+## ⚙️ Benchmark design
 
 MGXBench evaluates two complementary dimensions of distributed GPU execution:
 
-- **Data decomposition:** how matrices are partitioned and assigned to GPUs.
+- **Domain decomposition:** how matrices are partitioned and assigned to GPUs.
 - **Communication model:** how matrix data is transferred and whether communication can overlap GPU computation.
 
 The workload is dense matrix multiplication, $C = A × B$, with square matrices of order $N$. The Python runner (`benchmark.py`) orchestrates repeated runs of the CUDA executables, records timings and validation results, and exports CSV/JSON summaries.
 
-## Domain decomposition
+## 🔎 Domain decomposition
 
-### Scheme 1 — 1D Row-Block
+<!--  #### `Scheme 1 — 1D Row-Block`
 
-Matrix **A** is partitioned by rows across GPUs. Each GPU needs the complete matrix **B** and computes its corresponding block of **C**:
+Matrix $A$ is partitioned by rows across GPUs. Each GPU needs the complete matrix $B$ and computes its corresponding block of $C$:
 
 $$
 C_i = A_i B
@@ -39,19 +53,19 @@ $$
 
 For the current implementation, **N must be divisible by the number of MPI ranks**.
 
-### Scheme 2 — 2D Block/SUMMA
+#### `Scheme 2 — 2D Block/SUMMA`
 
-Matrices are partitioned into two-dimensional blocks. Each output block is formed from contributions of the corresponding **A** and **B** blocks:
+Matrices are partitioned into two-dimensional blocks. Each output block is formed from contributions of the corresponding $A$ and $B$ blocks:
 
 $$
 C_{ij} = \sum_k A_{ik} B_{kj}
 $$
 
-The implementation follows a block-oriented organization based on **SUMMA (Scalable Universal Matrix Multiplication Algorithm)**. For the current implementation, the number of ranks must be a **perfect square**, and **N must be divisible by the square root of the rank count**.
+The implementation follows a block-oriented organization based on **SUMMA (Scalable Universal Matrix Multiplication Algorithm)**. For the current implementation, the number of ranks must be a **perfect square**, and **N must be divisible by the square root of the rank count**. -->
 
 ![1D and 2D domain decomposition](img/domain-decomposition.png)
 
-## Communication models
+## 🔄 Communication models
 
 The benchmark exposes the following library identifiers through `--libraries`:
 
@@ -69,7 +83,7 @@ The terms *asynchronous* and *overlap* describe the implementations' **intended 
 
 ![Communication models](img/communication-models.png)
 
-## Communication–computation overlap approaches
+## 🛠️ Communication–computation overlap approaches
 
 | Synchronous  | Asynchronous |
 |---|---|
@@ -79,92 +93,99 @@ The terms *asynchronous* and *overlap* describe the implementations' **intended 
 
 Potential overlap mechanisms include **chunking**, **CUDA streams**, **nonblocking communication**, and **double buffering**. The objective is to reduce exposed data-movement time by executing GPU computation while subsequent data is in transit.
 
-## Repository structure
+## 📂 Repository structure
 
 ```text
-benchmark/
-├── install.sh                 # Configure and build both CUDA executables
-├── CMakeLists.txt             # CMake build configuration
-├── benchmark.py               # Experiment runner; CSV and JSON output
-├── README.md                  # MGXBench documentation (this file)
+MGXBench/
 ├── 1D-row-block/
 │   ├── mmb.cu
 │   ├── mulmat_kernel.cu
-│   ├── README.md
-│   └── experimental-results/  # Historical measurements
+│   └── README.md
+│
 ├── 2D-block-matrix/
 │   ├── mmb.cu
 │   ├── mulmat_kernel.cu
-│   ├── README.md
-│   └── experimental-results/  # Historical measurements
-└── img/
-    ├── domain-decomposition.png
-    └── communication-models.png
+│   └── README.md
+│
+├── configuration/
+│   ├── experiment.py
+│   ├── run_campaign.py
+│   ├── plot_benchmark.py
+│   ├── plot_nsys_stats.py
+│   └── requirements-viz.txt
+│
+├── tools/
+│   ├── profile_rank.sh
+│   └── stats_rank.sh
+│
+├── tests/
+│   ├── test_workflow.py
+│   ├── test_configuration_layout.py
+│   ├── test_nsys_stats.py
+│   └── test_v5_scope.py
+│
+├── examples/
+├── img/
+├── benchmark.py
+├── CMakeLists.txt
+├── install.sh
+├── README.md
+└── GUIDE.md      
 ```
 
 The `build/` and `results/` directories are created locally and are not required in the source distribution.
 
-## Requirements and SDumont environment
+## 🚀 Get Started
 
-The documented reference environment is the **Santos Dumont (SDumont) supercomputer**, using **NVIDIA V100** GPUs with CUDA compute capability **7.0 (`sm_70`)**.
-
-- Linux and Python 3,
-- CMake 3.22 or newer (a version compatible with the selected compiler runtime),
-- GCC 9.3 and CUDA 11.2,
-- CUDA-enabled OpenMPI 4.1.4,
-- NCCL 2.13 and NVSHMEM 3.1.7,
-
-Example SDumont modules initialization:
+## Initialization Modules
 
 ```bash
-module load anaconda3/2020.07_sequana 
-module load nvshmem/3.1.7_cuda-11.2_sequana
-module load cmake/3.30.3_sequana
-module load gcc/9.3_sequana
-module load cuda/11.2_sequana
-module load openmpi/gnu/4.1.4+cuda-11.2_sequana
-module load nccl/2.13_cuda-11.2_sequana
+[username ~]$ module load anaconda3/2020.07_sequana 
+[username ~]$ module load nvshmem/3.1.7_cuda-11.2_sequana
+[username ~]$ module load cmake/3.30.3_sequana
+[username ~]$ module load gcc/9.3_sequana
+[username ~]$ module load cuda/11.2_sequana
+[username ~]$ module load openmpi/gnu/4.1.4+cuda-11.2_sequana
+[username ~]$ module load nccl/2.13_cuda-11.2_sequana
 ```
 
-Ensure the selected CUDA toolkit, GCC compiler, MPI implementation, and CMake executable are mutually compatible.
-
-## Installation and compilation
-
-From the repository root, with the required modules already loaded:
+## 📦 Installation
 
 ```bash
-bash install.sh
+[username ~]$ bash install.sh
 ```
 
-To remove the existing build directory before compiling:
+## ▶️ Running 
+
+**Run within a GPU allocation**, following the cluster scheduler's policies. For the examples below, request **four visible GPUs on one node**. The current execution setup associates ranks with GPU indices on the same node.
+
+#### `1D Row-Block` 
 
 ```bash
-bash install.sh --clean
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 4096 \
+              --ranks 4 \
+              --libraries MMM YYY CCC XXX NNN WWW SSS \
+              --warmup 2 --repeats 3 \
+              --plot \
+              --output results/1d
 ```
 
-## Running MGXBench
-
-**Run within a GPU allocation**, following the cluster scheduler's policies. For the examples below, request **four visible GPUs on one node**. The current execution setup associates ranks with GPU indices on the same node; it is **not a general multi-node launcher**.
-
-### 1D Row-Block — 4 GPUs
+#### `2D Block/SUMMA`
 
 ```bash
-python3 benchmark.py --decomposition 1d --size 4096 --ranks 4 \
-  --libraries MMM YYY CCC XXX NNN WWW SSS \
-  --warmup 2 --repeats 5 \
-  --output results/1d
+[username ~]$ python3 benchmark.py \
+              --decomposition 2d \
+              --size 4096 \
+              --ranks 4 \
+              --libraries MMM YYY CCC XXX NNN WWW SSS \
+              --warmup 2 --repeats 3 \
+              --plot \
+              --output results/2d
 ```
 
-### 2D Block/SUMMA — 4 GPUs
-
-```bash
-python3 benchmark.py --decomposition 2d --size 4096 --ranks 4 \
-  --libraries MMM YYY CCC XXX NNN WWW SSS \
-  --warmup 2 --repeats 5 \
-  --output results/2d
-```
-
-### Main command-line arguments
+#### Main command-line arguments
 
 | Argument | Purpose |
 |---|---|
@@ -178,48 +199,35 @@ python3 benchmark.py --decomposition 2d --size 4096 --ranks 4 \
 | `--build-dir` | Directory containing `mm_1d` and `mm_2d` |
 | `--launcher` | MPI launcher executable (default: `mpirun`) |
 | `--launcher-args` | Additional launcher arguments |
+| `--plot` | Generate figure and table with the experimental results |
 | `--timeout` | Execution timeout in seconds |
 
-## Outputs and performance metrics
+##  📊 Outputs and performance metrics
 
 ```text
-results/
-├── 1d/
-│   ├── benchmark.csv
-│   └── benchmark.json
-└── 2d/
-    ├── benchmark.csv
-    └── benchmark.json
+results/sweep-4gpus/
+├── runs/
+│   └── <identificador>/
+│       ├── benchmark.csv
+│       ├── benchmark.json
+│       └── <logs de execução>
+└── report/
+    ├── report.html
+    ├── report.md
+    ├── summary.csv
+    └── <figures PNG and PDF>
 ```
 
-The CSV summarizes each implementation using fields such as `mean_s`, `median_s`, `p95_s`, `stddev_s`, `gflops`, `speedup_vs_MMM`, and `validated`. The JSON stores run parameters, individual timing samples, and recorded failures.
+## 🧩 Validation
 
-**Throughput** is computed from the conventional dense matrix multiplication operation count:
+```bash
+[username ~]$ python3 -m unittest discover -s tests -v
+```
 
-$$
-\mathrm{GFLOP/s} = \frac{2N^3}{\mathrm{mean\_s}\times 10^9}
-$$
-
-**Speedup** uses the `MMM` (MPI-SYNC) result as the baseline:
-
-$$
-\mathrm{Speedup}_{X} = \frac{T_{\mathrm{MMM}}}{T_X}
-$$
-
-The reported time is measured by the C++/CUDA application's computation/communication region, **not the complete MPI process launch**.
-
-## Cleaning the build
+## ✅ Cleaning the build
 
 Remove compiled objects and binaries while retaining the CMake configuration:
 
 ```bash
-cmake --build build --target clean
+[username ~]$ cmake --build build --target clean
 ```
-
-Remove the entire CMake build directory:
-
-```bash
-rm -rf build
-```
-
-Neither command removes `results/`. Delete a specific result directory explicitly if you intend to discard its reports.

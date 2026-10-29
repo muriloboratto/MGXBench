@@ -13,16 +13,18 @@ find_path(NVSHMEM_INCLUDE_DIR NAMES nvshmem.h HINTS ENV NVSHMEM_HOME PATH_SUFFIX
 # can provide libnvshmem_host.so plus libnvshmem_device.a.
 find_library(NVSHMEM_LIBRARY NAMES nvshmem nvshmem_host
   HINTS ENV NVSHMEM_HOME PATH_SUFFIXES lib lib64 REQUIRED)
-# libnvshmem.a already contains CUDA device symbols. Do not link
-# libnvshmem_device.a together with the monolithic archive.
-# NVSHMEM_DEVICE_LIBRARY is intentionally not used with libnvshmem.a.
-find_library(NVML_LIBRARY NAMES nvidia-ml HINTS /usr/lib64 /usr/lib/x86_64-linux-gnu)
-
-message(STATUS "NVSHMEM host/legacy library: ${NVSHMEM_LIBRARY}")
-message(STATUS "NVSHMEM device library: not linked separately")
+# Split NVSHMEM distributions require host and device libraries.
+# Legacy monolithic libnvshmem.a must NOT be combined with nvshmem_device.
+set(NVSHMEM_LINK_LIBRARIES "${NVSHMEM_LIBRARY}")
 if(NVSHMEM_LIBRARY MATCHES "nvshmem_host")
-  message(FATAL_ERROR "This build expects monolithic libnvshmem.a. Configure with -DNVSHMEM_LIBRARY=$ENV{NVSHMEM_HOME}/lib/libnvshmem.a")
+  find_library(NVSHMEM_DEVICE_LIBRARY NAMES nvshmem_device
+    HINTS ENV NVSHMEM_HOME PATH_SUFFIXES lib lib64 REQUIRED)
+  list(APPEND NVSHMEM_LINK_LIBRARIES "${NVSHMEM_DEVICE_LIBRARY}")
+  message(STATUS "Using split NVSHMEM: ${NVSHMEM_LIBRARY} + ${NVSHMEM_DEVICE_LIBRARY}")
+else()
+  message(STATUS "Using monolithic NVSHMEM: ${NVSHMEM_LIBRARY}")
 endif()
+find_library(NVML_LIBRARY NAMES nvidia-ml HINTS /usr/lib64 /usr/lib/x86_64-linux-gnu)
 
 foreach(variant IN ITEMS 1D-row-block 2D-block-matrix)
   if(variant STREQUAL "1D-row-block")
@@ -33,9 +35,8 @@ foreach(variant IN ITEMS 1D-row-block 2D-block-matrix)
   add_executable(${exe} ${variant}/mmb.cu ${variant}/mulmat_kernel.cu)
   target_include_directories(${exe} PRIVATE ${NCCL_INCLUDE_DIR} ${NVSHMEM_INCLUDE_DIR})
   target_link_libraries(${exe} PRIVATE MPI::MPI_CXX CUDA::cudart CUDA::cuda_driver
-    ${NCCL_LIBRARY} ${NVSHMEM_LIBRARY})
-  # Do not link libnvshmem_device.a alongside legacy libnvshmem.a:
-  # both contain CUDA device symbols and cause nvlink multiple definitions.
+    ${NCCL_LIBRARY} ${NVSHMEM_LINK_LIBRARIES})
+  # CUDA separable compilation performs device linking for split NVSHMEM.
 
   if(NVML_LIBRARY)
     target_link_libraries(${exe} PRIVATE ${NVML_LIBRARY})
