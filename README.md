@@ -32,7 +32,7 @@ MGXBench is a C++/CUDA benchmark for evaluating the execution performance of dis
 10. [Validation and interpretation](#validation-and-interpretation)
 11. [Cleaning the build](#cleaning-the-build)
 
-## ⚙️ Benchmark design
+## Benchmark design
 
 MGXBench evaluates two complementary dimensions of distributed GPU execution:
 
@@ -41,31 +41,13 @@ MGXBench evaluates two complementary dimensions of distributed GPU execution:
 
 The workload is dense matrix multiplication, $C = A × B$, with square matrices of order $N$. The Python runner (`benchmark.py`) orchestrates repeated runs of the CUDA executables, records timings and validation results, and exports CSV/JSON summaries.
 
-## 🔎 Domain decomposition
-
-<!--  #### `Scheme 1 — 1D Row-Block`
-
-Matrix $A$ is partitioned by rows across GPUs. Each GPU needs the complete matrix $B$ and computes its corresponding block of $C$:
-
-$$
-C_i = A_i B
-$$
-
-For the current implementation, **N must be divisible by the number of MPI ranks**.
-
-#### `Scheme 2 — 2D Block/SUMMA`
-
-Matrices are partitioned into two-dimensional blocks. Each output block is formed from contributions of the corresponding $A$ and $B$ blocks:
-
-$$
-C_{ij} = \sum_k A_{ik} B_{kj}
-$$
-
-The implementation follows a block-oriented organization based on **SUMMA (Scalable Universal Matrix Multiplication Algorithm)**. For the current implementation, the number of ranks must be a **perfect square**, and **N must be divisible by the square root of the rank count**. -->
+## Domain decomposition
 
 ![1D and 2D domain decomposition](img/domain-decomposition.png)
 
-## 🔄 Communication models
+## Communication models
+
+![Communication models](img/communication-models.png)
 
 The benchmark exposes the following library identifiers through `--libraries`:
 
@@ -81,19 +63,7 @@ The benchmark exposes the following library identifiers through `--libraries`:
 
 The terms *asynchronous* and *overlap* describe the implementations' **intended behavior**. Actual overlap depends on the hardware, runtime, synchronization, and problem size, and should be verified experimentally.
 
-![Communication models](img/communication-models.png)
-
-## 🛠️ Communication–computation overlap approaches
-
-| Synchronous  | Asynchronous |
-|---|---|
-| Communication completes before GEMM begins | Data may be transferred in chunks |
-| Communication → GEMM | Communication ↔ GEMM |
-| No intended overlap | Intended communication–computation overlap |
-
-Potential overlap mechanisms include **chunking**, **CUDA streams**, **nonblocking communication**, and **double buffering**. The objective is to reduce exposed data-movement time by executing GPU computation while subsequent data is in transit.
-
-## 📂 Repository structure
+##  Repository structure
 
 ```text
 MGXBench/
@@ -137,7 +107,7 @@ The `build/` and `results/` directories are created locally and are not required
 
 ## 🚀 Get Started
 
-## Initialization Modules
+### Initialization Modules
 
 ```bash
 [username ~]$ module load anaconda3/2020.07_sequana 
@@ -149,17 +119,17 @@ The `build/` and `results/` directories are created locally and are not required
 [username ~]$ module load nccl/2.13_cuda-11.2_sequana
 ```
 
-## 📦 Installation
+### 📦 Installation
 
 ```bash
 [username ~]$ bash install.sh
 ```
 
-## ▶️ Running 
+### ▶️ Running 
 
 **Run within a GPU allocation**, following the cluster scheduler's policies. For the examples below, request **four visible GPUs on one node**. The current execution setup associates ranks with GPU indices on the same node.
 
-#### `1D Row-Block` 
+##### `1D Row-Block` 
 
 ```bash
 [username ~]$ python3 benchmark.py \
@@ -167,12 +137,12 @@ The `build/` and `results/` directories are created locally and are not required
               --size 4096 \
               --ranks 4 \
               --libraries MMM YYY CCC XXX NNN WWW SSS \
-              --warmup 2 --repeats 3 \
+              --warmup 2 --repeats 5 \
               --plot \
               --output results/1d
 ```
 
-#### `2D Block/SUMMA`
+##### `2D Block/SUMMA`
 
 ```bash
 [username ~]$ python3 benchmark.py \
@@ -185,7 +155,7 @@ The `build/` and `results/` directories are created locally and are not required
               --output results/2d
 ```
 
-#### Main command-line arguments
+##### Main command-line arguments
 
 | Argument | Purpose |
 |---|---|
@@ -202,7 +172,7 @@ The `build/` and `results/` directories are created locally and are not required
 | `--plot` | Generate figure and table with the experimental results |
 | `--timeout` | Execution timeout in seconds |
 
-##  📊 Outputs and performance metrics
+###  📊 Outputs and performance metrics
 
 ```text
 results/sweep-4gpus/
@@ -218,13 +188,13 @@ results/sweep-4gpus/
     └── <figures PNG and PDF>
 ```
 
-## 🧩 Validation
+### 🧩 Validation
 
 ```bash
 [username ~]$ python3 -m unittest discover -s tests -v
 ```
 
-## ✅ Cleaning the build
+### ✅ Cleaning the build
 
 Remove compiled objects and binaries while retaining the CMake configuration:
 
