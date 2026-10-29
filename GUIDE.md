@@ -1,4 +1,4 @@
-# MGXBench — User Guide | v1.0
+# MGXBench — User Guide | v1.0.0
 
 A practical guide to running MGXBench benchmarks in multi-GPU environments, comparing communication models, generating plots, and analyzing execution profiles from the command line. Adapt the commands shown to the resources and modules available on your cluster.
 

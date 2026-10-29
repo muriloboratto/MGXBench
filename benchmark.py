@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """MGXBench — Multi-GPU Execution Benchmark. Preserves the CUDA/MPI application."""
+
 import argparse,csv,json,math,os,pathlib,re,shlex,statistics,subprocess,sys,time
 from configuration.experiment import collect_environment, new_run, sample_statistics
 LIBRARY_NAMES = {

@@ -58,6 +58,7 @@
  *   Therefore, four MPI processes are launched, each associated with one
  *   NVIDIA GPU.
  *
+ *
  ******************************************************************************/
 
 #include <stdint.h>

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 printf "\n%s\n" "============================================================" "  MGXBench | Multi-GPU Execution Benchmark" "  Installer | CUDA / MPI / NCCL / NVSHMEM" "============================================================"

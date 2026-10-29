@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate explicitly SYNTHETIC measurements to exercise every figure family."""
+
 import json
 from pathlib import Path
 import sys

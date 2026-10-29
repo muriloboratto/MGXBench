@@ -48,3 +48,4 @@ foreach(variant IN ITEMS 1D-row-block 2D-block-matrix)
   set_target_properties(${exe} PROPERTIES CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 14)
 endforeach()
 
+

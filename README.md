@@ -107,7 +107,7 @@ The `build/` and `results/` directories are created locally and are not required
 
 ## 🚀 Get Started
 
-### Initialization Modules
+### ⚙️ Initialization Modules
 
 ```bash
 [username ~]$ module load anaconda3/2020.07_sequana 
@@ -201,3 +201,9 @@ Remove compiled objects and binaries while retaining the CMake configuration:
 ```bash
 [username ~]$ cmake --build build --target clean
 ```
+
+---
+
+<div align="center">
+  <strong>MGXBench</strong> · Distributed GPU computing · Communication performance · Reproducible benchmarking
+</div>
