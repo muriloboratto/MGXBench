@@ -7,15 +7,17 @@
   <img alt="Version" src="https://img.shields.io/badge/version-1-blue?style=flat-square">
   <img alt="C++ and CUDA" src="https://img.shields.io/badge/C++-CUDA-76B900?style=flat-square">
   <img alt="Communication" src="https://img.shields.io/badge/communication-MPI%20%7C%20CUDA--Aware%20MPI%20%7C%20NCCL%20%7C%20NVSHMEM-00599C?style=flat-square">
-  
+  <img alt="Visualization" src="https://img.shields.io/badge/plots-Python%20%7C%20Matplotlib-3776AB?style=flat-square">
+  <img alt="HPC" src="https://img.shields.io/badge/computing-HPC-8A2BE2?style=flat-square">
   <img alt="Multi-GPU" src="https://img.shields.io/badge/architecture-Multi--GPU-76B900?style=flat-square">
   <img alt="Benchmark" src="https://img.shields.io/badge/performance-Benchmarking-DC143C?style=flat-square">
+
+  [![Python CI](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml)
+[![CMake Validation](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml)
 </p>
 </p>
 
 </div>
-[![Python CI](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml)
-[![CMake Validation](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml)
 
 MGXBench is a C++/CUDA benchmark for evaluating the execution performance of distributed matrix multiplication on multiple NVIDIA GPUs. Its current workload compares **1D Row-Block** and **2D Block/SUMMA** decompositions using **MPI, CUDA-aware MPI, NCCL, and NVSHMEM** communication strategies. The benchmark investigates how data distribution, communication mechanisms, and communication–computation overlap affect execution time and throughput.
 
