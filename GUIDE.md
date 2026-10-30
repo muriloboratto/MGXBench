@@ -250,20 +250,34 @@ $$
 
 ### 6.2 Weak scaling: approximately constant computational work per GPU
 
-This is **compute-based weak scaling**, rather than memory-based weak scaling. For dense matrix multiplication, this mode keeps the **approximate arithmetic work per rank** constant, i.e., $N^3/p$ is approximately constant. This does not imply constant memory usage per GPU:
+This is **compute-based weak scaling**, rather than memory-based weak scaling. This example requires resources and appropriate mapping for up to nine GPUs. $N$ increases approximately as $N(p) = N(1) \times p^{1/3}$ and is rounded to satisfy decomposition constraints. GPU memory usage is not held constant.
+
+The runner aligns the theoretical size to the nearest valid multiple using
+`d = lcm(--size-alignment, process-grid divisor)`, where the divisor is `p` for
+1D and `sqrt(p)` for 2D. The default is `--size-alignment 4`.
+For example, with `--base-size 4096 --ranks 1 4 8`, the 1D sizes are
+`4096`, `6500`, and `8192`. **Multiples of four are not necessarily powers of two.**
+The 2D/SUMMA implementation skips `p=8`, because its process grid must be square.
 
 ```bash
 [username ~]$ python3 configuration/run_campaign.py \
-              --mode weak \
-              --base-size 4096 \
-              --ranks 1 4 9 \
-              --libraries MMM NNN SSS \
-              --warmup 2 --repeats 3 \
+              --mode weak  \
+              --base-size 4096  \
+              --ranks 1 4 8 \
+              --decompositions 1d  \
+              --size-alignment 4 \
+              --libraries MMM NNN SSS  \
+              --warmup 1 --repeats 2 \
               --output results/weak \
               --label weak-N4096
 ```
 
-This example requires resources and appropriate mapping for up to nine GPUs. $N$ increases approximately as $N(p) = N(1) \times p^{1/3}$ and is rounded to satisfy decomposition constraints. GPU memory usage is not held constant.
+Each campaign writes `<label>-size-manifest.csv` in the output directory,
+with `N_theoretical`, `N_actual`, `work_per_gpu_ratio`, decomposition, and ranks.
+The work ratio is `(N_actual/base_size)^3 / p`; values near 1 indicate
+approximately constant floating-point work per rank. The alignment does not
+make GPU memory usage constant. Confirm that the selected CUDA kernels accept
+the aligned dimensions (including their tiling constraints) before long runs.
 
 The runner rejects rounding choices that change the work per rank by more than $2.5%$. The plot allows at most a 5% variation between the largest and smallest $N^3 / p$ values, requires one configuration per $p$, a reference at $p = 1$, and a label beginning with `weak`. Weak-scaling efficiency is $E(p) = \frac{T(1)}{T(p)} \times 100\%$.
 
