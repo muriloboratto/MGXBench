@@ -1,3 +1,4 @@
+[![MGXBench Python CI](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml)
 <div align="center">
     <img src="img/logo.png" width="800" style="max-width: 100%;">
 <!-- Technologies -->
