@@ -242,7 +242,7 @@ By default, a campaign includes both decompositions, rank counts of $1$ and $4$,
               --label strong-N8192
 ```
 
-The `strong` mode requires exactly one matrix size. For each model and decomposition, compare measured execution times at the same matrix size. The 2D/SUMMA decomposition requires a square process grid (for example, 1, 4, or 9 ranks); incompatible configurations do not produce valid data points.
+The `strong` mode requires exactly one matrix size. For each model and decomposition, compare measured execution times at the same matrix size. The 2D/SUMMA decomposition requires a square process grid (for example, 1, 2, or 4 ranks); incompatible configurations do not produce valid data points.
 
 $$
 S(p)=\frac{T(1)}{T(p)},\qquad E(p)=\frac{S(p)}{p}\times100\%.
@@ -255,15 +255,25 @@ This is **compute-based weak scaling**, rather than memory-based weak scaling. T
 The runner aligns the theoretical size to the nearest valid multiple using
 `d = lcm(--size-alignment, process-grid divisor)`, where the divisor is `p` for
 1D and `sqrt(p)` for 2D. The default is `--size-alignment 4`.
+<<<<<<< HEAD
 For example, with `--base-size 4096 --ranks 1 4 8`, the 1D sizes are
 `4096`, `6500`, and `8192`. **Multiples of four are not necessarily powers of two.**
 The 2D/SUMMA implementation skips `p=8`, because its process grid must be square.
+=======
+For example, with `--base-size 4096 --ranks 1 2 4`, the 1D sizes are
+`4096`, `6500`, and `8192`. **Multiples of four are not necessarily powers of two.**
+The 2D/SUMMA implementation skips `p=4`, because its process grid must be square.
+>>>>>>> f0be9e6 (Update weak scaling, .gitignore, and plots  pending error)
 
 ```bash
 [username ~]$ python3 configuration/run_campaign.py \
               --mode weak  \
               --base-size 4096  \
+<<<<<<< HEAD
               --ranks 1 4 8 \
+=======
+              --ranks 1 2 4 \
+>>>>>>> f0be9e6 (Update weak scaling, .gitignore, and plots  pending error)
               --decompositions 1d  \
               --size-alignment 4 \
               --libraries MMM NNN SSS  \

@@ -22,7 +22,6 @@ def weak_scaling_size(base_size, ranks, decomposition='1d', size_alignment=4):
             raise ValueError('2D decomposition requires a square process grid')
     else:
         raise ValueError('Invalid decomposition')
-    divisor = math.lcm(size_alignment, grid_divisor)
     theoretical = base_size * ranks ** (1.0 / 3.0)
     actual = max(divisor, divisor * math.floor(theoretical / divisor + 0.5))
     return theoretical, actual
@@ -35,7 +34,6 @@ def configurations(decompositions, sizes, ranks, mode, base_size, size_alignment
             if p<=0:raise ValueError('Ranks must be positive')
             if d=='2d' and math.isqrt(p)**2!=p:
                 print(f'Skipping 2D p={p}: grid must be square',file=sys.stderr);continue
-            divisor = math.lcm(size_alignment, p if d == '1d' else math.isqrt(p))
             requested = [base_size * p ** (1 / 3)] if mode == 'weak' else sizes
             for value in requested:
                 if mode == 'weak':

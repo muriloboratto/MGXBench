@@ -35,7 +35,7 @@ def read_summary(path):
         if name and percent:
             break
     else:
-        raise ValueError('Colunas Name/Kernel Name e Time (%) não encontradas. Exporte um resumo de kernels em CSV, não a tabela alinhada do terminal.')
+        raise ValueError('"Name/Kernel Name" and "Time (%)" columns not found. Please export a kernel summary in CSV format, rather than the aligned terminal table.')
     records=[]
     for record in csv.reader(io.StringIO('\n'.join(lines[index+1:]))):
         if not record or not any(x.strip() for x in record):
@@ -43,24 +43,24 @@ def read_summary(path):
             continue
         if len(record)!=len(names):
             if records:break
-            raise ValueError('Linha CSV com número de colunas inesperado')
+            raise ValueError('CSV line with an unexpected number of columns')
         if columns(record)[1]:
-            raise ValueError('Use apenas um relatório CSV por entrada')
+            raise ValueError('Use only one CSV report per entry')
         records.append(record)
     df=pd.DataFrame(records,columns=names)
-    if df.empty:raise ValueError('Resumo sem kernels; verifique se a captura contém atividade CUDA')
+    if df.empty:raise ValueError('Summary with no kernels; check if the capture contains CUDA activity')
     numeric=pd.to_numeric(df[percent].astype(str).str.replace('%','',regex=False).str.strip(),errors='coerce')
     valid=numeric.notna() & numeric.map(lambda x: math.isfinite(x) and 0<=x<=100)
     valid &= df[name].astype(str).str.strip().ne('')
     discarded=int((~valid).sum())
     df=df.loc[valid].copy();df[percent]=numeric.loc[valid]
-    if df.empty:raise ValueError('O CSV não contém percentuais válidos de kernels')
+    if df.empty:raise ValueError('The CSV does not contain valid kernel percentages.')
     return df,name,percent,discarded
 
 
 def export_stats(source, output, report='auto', nsys='nsys', timeout=600):
     executable=shutil.which(nsys)
-    if not executable:raise ValueError(f'Executável {nsys!r} não encontrado. Instale/carregue Nsight CLI ou forneça um CSV já exportado.')
+    if not executable:raise ValueError(f'Executable {nsys!r} not found. Install/load Nsight CLI or provide an already exported CSV.')
     attempts=REPORTS if report=='auto' else (report,)
     output=Path(output);output.mkdir(parents=True,exist_ok=True)
     log=output/f'{source.stem}_nsys_stats.log'
@@ -74,7 +74,7 @@ def export_stats(source, output, report='auto', nsys='nsys', timeout=600):
                 try:
                     proc=subprocess.run(command,capture_output=True,text=True,timeout=timeout)
                 except subprocess.TimeoutExpired as exc:
-                    raise ValueError(f'nsys stats excedeu {timeout}s; consulte {log}') from exc
+                    raise ValueError(f'nsys stats exceeded {timeout}s; check {log}') from exc
                 transcript.extend([proc.stdout,proc.stderr])
                 candidates=list(Path(tmp).glob('*.csv'))
                 if proc.returncode==0 and len(candidates)==1:
@@ -86,8 +86,8 @@ def export_stats(source, output, report='auto', nsys='nsys', timeout=600):
                 message=(proc.stdout+'\n'+proc.stderr).lower()
                 unknown=any(x in message for x in ('not found','not be found','unknown','unrecognized','invalid report','does not exist','not exist','no such')) and any(x in message for x in ('report','gpukernsum','cuda_gpu_kern_sum'))
                 if report=='auto' and unknown and selected!=attempts[-1]:continue
-                raise ValueError(f'Falha ao exportar {selected}; consulte {log}. Confira nsys --version e nsys stats --help.')
-        raise ValueError(f'Nenhum relatório de kernels compatível; consulte {log}')
+                raise ValueError(f'Falha ao exportar {selected}; consulte {log}. Check nsys --version and nsys stats --help.')
+        raise ValueError(f'No compatible kernel report; see {log}')
     finally:
         log.write_text('\n'.join(transcript))
 
@@ -106,10 +106,10 @@ def plot_summary(path, top=15, output_dir=None, report=None):
     positions=range(len(selected));bars=ax.barh(positions,selected[percent],color='#2878B5')
     ax.set_yticks(list(positions));ax.set_yticklabels(labels,fontsize=9)
     ax.bar_label(bars,fmt='%.2f%%',padding=4)
-    ax.set_xlabel('Participação no tempo acumulado dos kernels (%)')
+    ax.set_xlabel('Contribution to the kernels accumulated time (%)')
     ax.set_ylabel('Kernel');ax.set_title(f'Nsight Systems — {path.stem}')
     ax.grid(axis='x',linestyle='--',alpha=.3);ax.set_axisbelow(True);ax.margins(x=.15)
-    fig.text(.5,.01,'Tempo acumulado dos kernels; não é tempo total da aplicação nem medida de overlap.',ha='center',fontsize=9)
+    fig.text(.5,.01,'Accumulated kernel time; this is neither the total application time nor a measure of overlap.',ha='center',fontsize=9)
     fig.tight_layout(rect=(0,.035,1,1))
     outputs=[]
     for extension in ('png','pdf'):
@@ -123,25 +123,25 @@ def plot_summary(path, top=15, output_dir=None, report=None):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('input_file',help='Resumo CSV ou captura .qdrep/.nsys-rep/.sqlite')
+    parser.add_argument('input_file',help='Sumary CSV or capture .qdrep/.nsys-rep/.sqlite')
     parser.add_argument('--top',type=int,default=15)
     parser.add_argument('--output-dir',type=Path)
     parser.add_argument('--report',choices=('auto',)+REPORTS,default='auto')
-    parser.add_argument('--nsys',default='nsys',help='Executável Nsight CLI')
+    parser.add_argument('--nsys',default='nsys',help='Profilling Nsight CLI')
     parser.add_argument('--timeout',type=int,default=600)
     args=parser.parse_args()
-    if args.top<1 or args.timeout<1:parser.error('--top e --timeout devem ser positivos')
+    if args.top<1 or args.timeout<1:parser.error('--top and --timeout must be positive')
     source=Path(args.input_file)
-    if not source.is_file():parser.error(f'Arquivo não encontrado: {source}')
+    if not source.is_file():parser.error(f'File not found: {source}')
     selected=None
     try:
         if source.suffix.lower() in ('.qdrep','.nsys-rep','.sqlite'):
             source,selected=export_stats(source,args.output_dir or source.parent/'stats',args.report,args.nsys,args.timeout)
-            print(f'CSV exportado: {source}')
-        elif source.suffix.lower()!='.csv':raise ValueError('Use .csv, .qdrep, .nsys-rep ou .sqlite')
+            print(f'CSV exported: {source}')
+        elif source.suffix.lower()!='.csv':raise ValueError('Use .csv, .qdrep, .nsys-rep or .sqlite')
         outputs,discarded=plot_summary(source,args.top,args.output_dir,selected)
-        if discarded:print(f'Aviso: {discarded} linha(s) sem percentual/nome válido foram descartadas.')
-        for output in outputs:print(f'Gráfico salvo: {output}')
-    except (ValueError,OSError,pd.errors.ParserError) as exc:parser.exit(2,f'Erro: {exc}\n')
+        if discarded:print(f'Warning: {discarded} lines without percentual/name valid they were discarded.')
+        for output in outputs:print(f'Save plot: {output}')
+    except (ValueError,OSError,pd.errors.ParserError) as exc:parser.exit(2,f'Error: {exc}\n')
 
 if __name__=='__main__':main()
