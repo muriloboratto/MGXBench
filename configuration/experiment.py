@@ -11,6 +11,9 @@ import shutil
 import statistics
 import subprocess
 import uuid
+import re
+import csv
+import io
 
 
 def probe(command):
@@ -23,18 +26,66 @@ def probe(command):
         return None
 
 
+
+def _gpu_inventory():
+    raw = probe(['nvidia-smi', '--query-gpu=index,name,uuid,driver_version,memory.total,pci.bus_id', '--format=csv,noheader,nounits'])
+    if raw is None:
+        return None
+    keys = ('index', 'name', 'uuid', 'driver_version', 'memory_mib', 'pci_bus_id')
+    return [dict(zip(keys, [v.strip() for v in row])) for row in csv.reader(io.StringIO(raw)) if len(row) == len(keys)]
+
+
+def _version_from_header(header, pattern):
+    if not header.is_file():
+        return None
+    text = header.read_text(errors='replace')
+    match = re.search(pattern, text, flags=re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _find_header(name, env_keys, candidates):
+    paths = []
+    for key in env_keys:
+        if os.environ.get(key):
+            paths.append(Path(os.environ[key]) / 'include' / name)
+    paths.extend(Path(path) for path in candidates)
+    return next((path for path in paths if path.is_file()), None)
+
+
+def _library_versions():
+    nccl_header = _find_header('nccl.h', ('NCCL_HOME', 'NCCL_ROOT'), ('/usr/include/nccl.h', '/usr/local/cuda/include/nccl.h'))
+    nvshmem_header = _find_header('nvshmem.h', ('NVSHMEM_HOME', 'NVSHMEM_ROOT'), ('/usr/include/nvshmem.h',))
+    nccl = None
+    if nccl_header:
+        text = nccl_header.read_text(errors='replace')
+        vals = [re.search(r'^\s*#\s*define\s+NCCL_'+part+r'\s+([0-9]+)', text, re.MULTILINE) for part in ('MAJOR','MINOR','PATCH')]
+        if all(vals):
+            nccl = '.'.join(m.group(1) for m in vals)
+    nvshmem = None
+    if nvshmem_header:
+        text = nvshmem_header.read_text(errors='replace')
+        vals = [re.search(r'^\s*#\s*define\s+NVSHMEM_'+part+r'\s+([0-9]+)', text, re.MULTILINE) for part in ('MAJOR_VERSION','MINOR_VERSION','PATCH_VERSION')]
+        if all(vals):
+            nvshmem = '.'.join(m.group(1) for m in vals)
+    return {'nccl_header_version': nccl, 'nccl_header_path': str(nccl_header) if nccl_header else None,
+            'nvshmem_header_version': nvshmem, 'nvshmem_header_path': str(nvshmem_header) if nvshmem_header else None,
+            'note': 'Header versions are compile-time hints, not proof of the dynamically loaded runtime versions.'}
+
+
 def collect_environment(metadata_path=None, build_dir=None):
     data = {
         'hostname': platform.node(), 'platform': platform.platform(),
         'python': platform.python_version(),
         'gpu': probe(['nvidia-smi', '--query-gpu=name,uuid,driver_version,memory.total', '--format=csv,noheader']),
         'gpu_topology': probe(['nvidia-smi', 'topo', '-m']),
+        'gpu_inventory': _gpu_inventory(),
+        'library_versions': _library_versions(),
         'cuda': probe(['nvcc', '--version']), 'mpi': probe(['mpirun', '--version']),
         'interconnect': probe(['ibstat']),
         'modules': os.environ.get('LOADEDMODULES'),
         'runtime': {k: v for k, v in os.environ.items() if k.startswith(('MM_PIPELINE_', 'NCCL_', 'NVSHMEM_', 'UCX_')) and not any(x in k.upper() for x in ('TOKEN','KEY','PASSWORD','SECRET'))},
         'allocation': {k: os.environ[k] for k in ('SLURM_JOB_NODELIST','SLURM_NNODES','SLURM_GPUS_ON_NODE') if k in os.environ},
-        'software_note': 'NCCL/NVSHMEM versions must be supplied in user metadata if not present in loaded modules.',
+        'software_note': 'NCCL/NVSHMEM header versions are hints; capture linked/runtime versions separately for publication.',
     }
     if metadata_path:
         supplied = json.loads(Path(metadata_path).read_text())

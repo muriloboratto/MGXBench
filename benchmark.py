@@ -86,6 +86,9 @@ def main():
     if not exe.is_file():ap.error('missing executable: '+str(exe)+'; first run cmake -S . -B build and cmake --build build -j 4, and check the build output')
     environment = collect_environment(args.environment, args.build_dir)
     dest, run_id = new_run(args.output)
+    (dest / 'environment.json').write_text(json.dumps(environment, indent=2, ensure_ascii=False) + '\n')
+    if environment.get('gpu_topology'):
+        (dest / 'gpu-topology.txt').write_text(environment['gpu_topology'] + '\n')
     child_env = os.environ.copy()
     child_env['MGXBENCH_INNER_LOOPS'] = str(args.inner_loops)
     child_env['MGXBENCH_INTERNAL_WARMUP'] = str(args.warmup if args.warmup_mode == 'internal' else 0)
