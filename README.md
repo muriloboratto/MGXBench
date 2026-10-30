@@ -1,4 +1,5 @@
-[![MGXBench Python CI](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml)
+[![Python CI](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml)
+[![CMake Validation](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml)
 <div align="center">
     <img src="img/logo.png" width="800" style="max-width: 100%;">
 <!-- Technologies -->
