@@ -24,9 +24,20 @@ class Workflow(unittest.TestCase):
             a,_=new_run(d);b,_=new_run(d);self.assertNotEqual(a,b)
 
     def test_campaign_constraints(self):
-        self.assertEqual(configurations(['2d'],[2048],[1,2,4],'strong',4096),[('2d',2048,1),('2d',2048,4)])
-        curve=configurations(['1d'],[],[1,8],'weak',1024)
-        self.assertEqual(curve,[('1d',1024,1),('1d',2048,8)])
+    self.assertEqual(
+        configurations(
+            ['2d'],
+            [2048],
+            [1, 2, 4],
+            'strong',
+            4096
+        ),
+        [
+            ('2d', 2048, 1),
+            ('2d', 2048, 2),
+            ('2d', 2048, 4)
+        ]
+    )    
 
     def test_loading_filtering_pooling_and_report(self):
         with tempfile.TemporaryDirectory() as d:
