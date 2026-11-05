@@ -7,12 +7,17 @@ import math
 import subprocess
 import sys
 
+try:
+    from configuration.grid import resolve_grid
+except ModuleNotFoundError:
+    from grid import resolve_grid
+
 
 def lcm(a, b):
     """Least common multiple, compatible with Python versions before 3.9."""
     return abs(a * b) // math.gcd(a, b)
 
-def weak_scaling_size(base_size, ranks, decomposition='1d', size_alignment=4):
+def weak_scaling_size(base_size, ranks, decomposition='1d', size_alignment=4, grid_rows=None, grid_cols=None):
     """Return (theoretical_N, aligned_N) for compute-based weak scaling.
 
     Alignment satisfies both the user-selected multiple and the process grid.
@@ -22,9 +27,8 @@ def weak_scaling_size(base_size, ranks, decomposition='1d', size_alignment=4):
     if decomposition == '1d':
         grid_divisor = ranks
     elif decomposition == '2d':
-        grid_divisor = math.isqrt(ranks)
-        if grid_divisor ** 2 != ranks:
-            raise ValueError('2D decomposition requires a square process grid')
+        rows, cols = resolve_grid(ranks, grid_rows, grid_cols)
+        grid_divisor = lcm(rows, cols)
     else:
         raise ValueError('Invalid decomposition')
     divisor = lcm(size_alignment, grid_divisor)
@@ -33,18 +37,20 @@ def weak_scaling_size(base_size, ranks, decomposition='1d', size_alignment=4):
     return theoretical, actual
 
 
-def configurations(decompositions, sizes, ranks, mode, base_size, size_alignment=4):
+def configurations(decompositions, sizes, ranks, mode, base_size, size_alignment=4, grid_rows=None, grid_cols=None):
     configs=[]
     for d in decompositions:
         for p in ranks:
             if p<=0:raise ValueError('Ranks must be positive')
-            if d=='2d' and math.isqrt(p)**2!=p:
-                print(f'Skipping 2D p={p}: grid must be square',file=sys.stderr);continue
-            divisor = lcm(size_alignment, p if d == '1d' else math.isqrt(p))
+            if d=='2d':
+                try: gr,gc=resolve_grid(p,grid_rows,grid_cols)
+                except ValueError as exc:
+                    print(f'Skipping 2D p={p}: {exc}',file=sys.stderr);continue
+            divisor = lcm(size_alignment, p if d == '1d' else lcm(gr,gc))
             requested = [base_size * p ** (1 / 3)] if mode == 'weak' else sizes
             for value in requested:
                 if mode == 'weak':
-                    _, n = weak_scaling_size(base_size, p, d, size_alignment)
+                    _, n = weak_scaling_size(base_size, p, d, size_alignment, grid_rows, grid_cols)
                 else:
                     n = max(divisor, divisor * math.floor(value / divisor + 0.5))
                 if mode!='weak' and n!=value:
@@ -65,16 +71,18 @@ def main():
     ap.add_argument('--mode',choices=['sweep','strong','weak'],default='sweep')
     ap.add_argument('--base-size',type=int,default=4096)
     ap.add_argument('--size-alignment',type=int,default=4,help='Minimum N alignment; combined with process-grid divisibility (default: 4)')
+    ap.add_argument('--grid-rows',type=int,default=None,help='Fixed 2D grid rows (must divide every 2D rank count)')
+    ap.add_argument('--grid-cols',type=int,default=None,help='Fixed 2D grid cols (must divide every 2D rank count)')
     ap.add_argument('--output',default='results/campaign')
     ap.add_argument('--label',default='campaign')
     args,extra=ap.parse_known_args()
     if any(x.split('=')[0] == '--dry-run' for x in extra):
         ap.error('--dry-run foi removido; campanhas executam os benchmarks imediatamente')
-    forbidden=('--size','--ranks','--decomposition','--output','--label')
+    forbidden=('--size','--ranks','--decomposition','--output','--label','--grid-rows','--grid-cols')
     if any(x.split('=')[0] in forbidden for x in extra):ap.error('Conflicting forwarded benchmark argument')
     if args.base_size<=0 or any(n<=0 for n in args.sizes) or args.size_alignment<=0:ap.error('Sizes and size alignment must be positive')
     if args.mode=='strong' and len(args.sizes)!=1:ap.error('Strong scaling requires exactly one --sizes value')
-    try:configs=configurations(args.decompositions,args.sizes,args.ranks,args.mode,args.base_size,args.size_alignment)
+    try:configs=configurations(args.decompositions,args.sizes,args.ranks,args.mode,args.base_size,args.size_alignment,args.grid_rows,args.grid_cols)
     except ValueError as exc:ap.error(str(exc))
     # Campaign manifest records the theoretical vs. actual sizes independently
     # of the benchmark's own output schema.
@@ -84,7 +92,7 @@ def main():
     with manifest.open('w', newline='', encoding='utf-8') as stream:
         writer = csv.DictWriter(stream, fieldnames=[
             'mode', 'decomposition', 'ranks', 'N_theoretical',
-            'N_actual', 'work_per_gpu_ratio', 'size_alignment'])
+            'N_actual', 'work_per_gpu_ratio', 'size_alignment', 'grid_rows', 'grid_cols'])
         writer.writeheader()
         for d, n, p in configs:
             theoretical = args.base_size * p ** (1.0 / 3.0) if args.mode == 'weak' else n
@@ -92,11 +100,16 @@ def main():
                 'mode': args.mode, 'decomposition': d, 'ranks': p,
                 'N_theoretical': f'{theoretical:.6f}', 'N_actual': n,
                 'work_per_gpu_ratio': f'{(n / args.base_size) ** 3 / p:.6f}' if args.mode == 'weak' else '',
-                'size_alignment': args.size_alignment})
+                'size_alignment': args.size_alignment,
+                'grid_rows': resolve_grid(p,args.grid_rows,args.grid_cols)[0] if d=='2d' else '',
+                'grid_cols': resolve_grid(p,args.grid_rows,args.grid_cols)[1] if d=='2d' else ''})
     print(f'Size manifest: {manifest}', flush=True)
     failures=0
     for d,n,p in configs:
         command=[sys.executable,str(Path(__file__).resolve().parents[1] / 'benchmark.py'),'--decomposition',d,'--size',str(n),'--ranks',str(p),'--output',args.output,'--label',('weak:' if args.mode=='weak' else '')+args.label]+extra
+        if d=='2d':
+            gr,gc=resolve_grid(p,args.grid_rows,args.grid_cols)
+            command+=['--grid-rows',str(gr),'--grid-cols',str(gc)]
         print(subprocess.list2cmdline(command),flush=True)
         if subprocess.run(command).returncode:failures+=1
     proc=subprocess.run([sys.executable,str(Path(__file__).with_name('plot_benchmark.py')),'--input',args.output,'--output',str(Path(args.output)/'report')])

@@ -23,15 +23,15 @@ def test_weak_scaling_2d_square_grid(ranks):
     assert n % int(ranks ** .5) == 0
 
 
-def test_weak_scaling_2d_rejects_non_square():
-    with pytest.raises(ValueError, match='square process grid'):
-        module.weak_scaling_size(4096, 8, '2d')
+def test_weak_scaling_2d_accepts_rectangular():
+    _, n = module.weak_scaling_size(4096, 8, '2d')
+    assert n % 2 == 0 and n % 4 == 0
 
 
-def test_campaign_skips_2d_eight_ranks():
+def test_campaign_includes_2d_eight_ranks():
     configs = module.configurations(['1d','2d'], [4096], [1,4,8], 'weak', 4096)
     assert ('1d',6500,4) in configs
-    assert all(not (d == '2d' and p == 8) for d,n,p in configs)
+    assert any(d == '2d' and p == 8 for d,n,p in configs)
 
 
 def test_strong_mode_keeps_fixed_size():

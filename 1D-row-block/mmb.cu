@@ -76,6 +76,25 @@
 #define TILE_DIM 32
 #define DEFAULT_PIPELINE_K_CHUNK 2048
 
+/* SSS diagnostics: set MGXBENCH_SSS_DEBUG=1 to trace each PE,
+ * MGXBENCH_SSS_SERIALIZE=1 to disable B/GEMM overlap for isolation. */
+static int sss_debug = 0;
+static int sss_serialize = 0;
+static int sss_symmetric_stage = 1; /* opt out with MGXBENCH_SSS_SYMMETRIC_STAGE=0 */
+static int sss_rank = -1;
+#define SSS_LOG(...) do { if (sss_debug) { \
+    fprintf(stderr, "[SSS rank=%d] ", sss_rank); \
+    fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); fflush(stderr); \
+} } while (0)
+#define SSS_CUDA_CHECK(call) do { cudaError_t sss_err_ = (call); \
+    if (sss_err_ != cudaSuccess) { \
+        fprintf(stderr, "[SSS rank=%d] CUDA failure %s:%d (%s): %s\n", \
+                sss_rank, __FILE__, __LINE__, #call, cudaGetErrorString(sss_err_)); \
+        fflush(stderr); MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE); \
+    } \
+} while (0)
+
+
 static int pipeline_k_chunk_from_env(int k)
 {
     int chunk = DEFAULT_PIPELINE_K_CHUNK;
@@ -106,16 +125,27 @@ static void prefetch_B_chunk(double *dst,
                              int my_pe,
                              cudaStream_t stream)
 {
+    SSS_LOG("prefetch begin offset=%d chunk=%d source_pe=%d", k_offset, k_chunk, source_pe);
+    if (!dst || !s_B || k_offset < 0 || k_chunk <= 0 || n <= 0 ||
+        source_pe < 0 || source_pe >= nvshmem_n_pes()) {
+        fprintf(stderr, "[SSS rank=%d] invalid prefetch parameters dst=%p src=%p offset=%d chunk=%d n=%d source=%d\n",
+                sss_rank, (void*)dst, (const void*)s_B, k_offset, k_chunk, n, source_pe);
+        fflush(stderr);
+        nvshmem_global_exit(EXIT_FAILURE);
+    }
     const double *src = s_B + (size_t)k_offset * n;
     const size_t count = (size_t)k_chunk * n;
+    SSS_LOG("GET dst=%p remote_src=%p bytes=%zu pe=%d", (void*)dst, (const void*)src, count*sizeof(double), source_pe);
 
     if (my_pe == source_pe) 
-        cudaMemcpyAsync(dst, src, count * sizeof(double),cudaMemcpyDeviceToDevice, stream);
+        SSS_CUDA_CHECK(cudaMemcpyAsync(dst, src, count * sizeof(double),cudaMemcpyDeviceToDevice, stream));
     else 
     {
         nvshmemx_double_get_nbi_on_stream(dst, src, count, source_pe, stream);
         nvshmemx_quiet_on_stream(stream);
     }
+    SSS_CUDA_CHECK(cudaPeekAtLastError());
+    SSS_LOG("prefetch enqueued offset=%d chunk=%d", k_offset, k_chunk);
 }
 
 extern int validate_matrix_C(const double *d_C, int rows, int cols, double expected, double abs_tol, double rel_tol, int rank);
@@ -153,6 +183,12 @@ int main(int argc, char *argv[])
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
     MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+    sss_rank = myRank;
+    sss_debug = getenv("MGXBENCH_SSS_DEBUG") && atoi(getenv("MGXBENCH_SSS_DEBUG")) != 0;
+    sss_serialize = getenv("MGXBENCH_SSS_SERIALIZE") && atoi(getenv("MGXBENCH_SSS_SERIALIZE")) != 0;
+    if (getenv("MGXBENCH_SSS_SYMMETRIC_STAGE"))
+        sss_symmetric_stage = atoi(getenv("MGXBENCH_SSS_SYMMETRIC_STAGE")) != 0;
+
     MPI_Get_processor_name(name, &resultlen);
 
     int deviceId = atoi(argv[1]);
@@ -195,7 +231,8 @@ int main(int argc, char *argv[])
     const char libB = communication_libraries[1];
     const char libC = communication_libraries[2];
 
-    cudaSetDevice(deviceId);
+    SSS_CUDA_CHECK(cudaSetDevice(deviceId));
+    SSS_LOG("CUDA device=%d selected", deviceId);
 
     /* ------------------------------------------------------------------ */
     /* NVSHMEM: initialize only when at least one operation uses 'S'.     */
@@ -210,10 +247,13 @@ int main(int argc, char *argv[])
         nvshmemx_init_attr_t attr = NVSHMEMX_INIT_ATTR_INITIALIZER;
         attr.mpi_comm = &mpi_comm;
 
+        SSS_LOG("NVSHMEM init begin");
         nvshmemx_init_attr(NVSHMEMX_INIT_WITH_MPI_COMM, &attr);
+        SSS_LOG("NVSHMEM init returned");
 
         myPE = nvshmem_my_pe();
         nPEs = nvshmem_n_pes();
+        SSS_LOG("NVSHMEM PE=%d/%d", myPE, nPEs);
 
         if (myPE != myRank || nPEs != nRanks) 
         {
@@ -387,7 +427,9 @@ int main(int argc, char *argv[])
 
     if (is_nvshmem_library(libB)) 
     {
+        SSS_LOG("nvshmem_malloc B bytes=%zu", bytes_B);
         s_B = (double *)nvshmem_malloc(bytes_B);
+        SSS_LOG("nvshmem_malloc B returned %p", (void*)s_B);
 
         if (!s_B) 
         {
@@ -424,8 +466,25 @@ int main(int argc, char *argv[])
     {
         const size_t stage_bytes = (size_t)pipeline_k_chunk * n * sizeof(double);
 
-        cudaMalloc((void **)&b_stage[0], stage_bytes);
-        cudaMalloc((void **)&b_stage[1], stage_bytes);
+        if (libB == 'S' && sss_symmetric_stage) {
+            /* All PEs must call symmetric allocations in identical order. */
+            b_stage[0] = (double *)nvshmem_malloc(stage_bytes);
+            b_stage[1] = (double *)nvshmem_malloc(stage_bytes);
+            if (!b_stage[0] || !b_stage[1]) {
+                fprintf(stderr, "[SSS rank=%d] nvshmem_malloc stage failed (%zu bytes each)\n", myRank, stage_bytes);
+                fflush(stderr);
+                nvshmem_global_exit(EXIT_FAILURE);
+            }
+            SSS_LOG("symmetric stage buffers %p %p bytes=%zu", (void*)b_stage[0], (void*)b_stage[1], stage_bytes);
+            nvshmem_barrier_all();
+        } else if (libB == 'S') {
+            SSS_CUDA_CHECK(cudaMalloc((void **)&b_stage[0], stage_bytes));
+            SSS_CUDA_CHECK(cudaMalloc((void **)&b_stage[1], stage_bytes));
+            SSS_LOG("CUDA stage buffers %p %p bytes=%zu", (void*)b_stage[0], (void*)b_stage[1], stage_bytes);
+        } else {
+            cudaMalloc((void **)&b_stage[0], stage_bytes);
+            cudaMalloc((void **)&b_stage[1], stage_bytes);
+        }
         
         if (libB == 'Y')
         {
@@ -434,11 +493,13 @@ int main(int argc, char *argv[])
         }
         cudaStreamCreateWithFlags(&comm_stream, cudaStreamNonBlocking);
         cudaStreamCreateWithFlags(&compute_stream, cudaStreamNonBlocking);
+        if (libB == 'S') SSS_CUDA_CHECK(cudaGetLastError());
 
         for (int i = 0; i < 2; ++i) 
         {
             cudaEventCreateWithFlags(&b_ready[i], cudaEventDisableTiming);
             cudaEventCreateWithFlags(&compute_done[i], cudaEventDisableTiming);
+            if (libB == 'S') SSS_CUDA_CHECK(cudaGetLastError());
         }
     }
 
@@ -499,6 +560,11 @@ int main(int argc, char *argv[])
         free(tmp_B);
     }
 
+    /* Ensure root's H2D initialization is complete before remote GETs. */
+    if (libB == 'S') {
+        SSS_CUDA_CHECK(cudaDeviceSynchronize());
+        SSS_LOG("B initialization completed before NVSHMEM barrier");
+    }
     if (uses_nvshmem)
         nvshmem_barrier_all();
 
@@ -636,7 +702,8 @@ int main(int argc, char *argv[])
             if (libB == 'S')
             {
                 prefetch_B_chunk(b_stage[0], s_B, 0, first_k, n, 0, myPE, comm_stream);
-                cudaEventRecord(b_ready[0], comm_stream);
+                SSS_CUDA_CHECK(cudaEventRecord(b_ready[0], comm_stream));
+                if (sss_serialize) SSS_CUDA_CHECK(cudaStreamSynchronize(comm_stream));
                 buffer_used[0] = 1;
             }
             else if (libB == 'Y')
@@ -692,11 +759,13 @@ int main(int argc, char *argv[])
 
                     if (libB == 'S')
                     {
+                        if (sss_serialize) SSS_CUDA_CHECK(cudaStreamSynchronize(compute_stream));
                         if (buffer_used[next])
-                            cudaStreamWaitEvent(comm_stream, compute_done[next], 0);
+                            SSS_CUDA_CHECK(cudaStreamWaitEvent(comm_stream, compute_done[next], 0));
                         
                         prefetch_B_chunk(b_stage[next], s_B, next_offset, next_k, n, 0, myPE, comm_stream);
-                        cudaEventRecord(b_ready[next], comm_stream);
+                        SSS_CUDA_CHECK(cudaEventRecord(b_ready[next], comm_stream));
+                        if (sss_serialize) SSS_CUDA_CHECK(cudaStreamSynchronize(comm_stream));
                         buffer_used[next] = 1;
                     }
                     else if (libB == 'Y')
@@ -735,7 +804,12 @@ int main(int argc, char *argv[])
                 }
             }
 
-            cudaStreamSynchronize(compute_stream);
+            if (libB == 'S') {
+                SSS_LOG("compute synchronization begin iter=%d", iter);
+                SSS_CUDA_CHECK(cudaStreamSynchronize(compute_stream));
+                SSS_CUDA_CHECK(cudaStreamSynchronize(comm_stream));
+                SSS_LOG("compute synchronization complete iter=%d", iter);
+            } else cudaStreamSynchronize(compute_stream);
         }
         else
         {
@@ -804,8 +878,9 @@ int main(int argc, char *argv[])
         }
     }
 
-    cudaDeviceSynchronize();
-    if (uses_nvshmem) nvshmem_barrier_all();
+    if (libB == 'S') { SSS_LOG("final device sync begin"); SSS_CUDA_CHECK(cudaDeviceSynchronize()); SSS_LOG("final device sync complete"); }
+    else cudaDeviceSynchronize();
+    if (uses_nvshmem) { SSS_LOG("final NVSHMEM barrier begin"); nvshmem_barrier_all(); SSS_LOG("final NVSHMEM barrier complete"); }
     MPI_Barrier(MPI_COMM_WORLD);
     stop_time = MPI_Wtime();
 
@@ -858,12 +933,18 @@ int main(int argc, char *argv[])
         {
             cudaEventDestroy(b_ready[i]);
             cudaEventDestroy(compute_done[i]);
-            cudaFree(b_stage[i]);
+            if (!(libB == 'S' && sss_symmetric_stage))
+                cudaFree(b_stage[i]);
             if (y_b_host[i]) cudaFreeHost(y_b_host[i]);
         }
         
         cudaStreamDestroy(comm_stream);
         cudaStreamDestroy(compute_stream);
+        if (libB == 'S' && sss_symmetric_stage) {
+            nvshmem_barrier_all();
+            nvshmem_free(b_stage[0]);
+            nvshmem_free(b_stage[1]);
+        }
     }
 
     if (d_A)  cudaFree(d_A);
@@ -905,3 +986,4 @@ int main(int argc, char *argv[])
     
     return all_valid ? 0 : 2;
 }
+

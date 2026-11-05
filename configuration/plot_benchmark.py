@@ -74,7 +74,7 @@ def consolidate(df):
     """Pool independent launches only inside an identical environment/configuration."""
     keys = ['environment_id','label','original_inner_loops','decomposition','library','size','ranks']
     rows = []
-    for _, group in df.groupby(keys, dropna=False):
+    for _, group in df.groupby(keys):
         r = group.iloc[0].to_dict()
         if len(group) > 1 and not all(len(x) for x in group.samples_s):
             raise ValueError('Repeated CSV summaries cannot be pooled without raw samples; select a single run')

@@ -10,11 +10,12 @@ A practical guide to running MGXBench benchmarks in multi-GPU environments, comp
 4. [Output Files and Performance Metrics](#outputs)
 5. [Benchmark Campaigns Across Matrix Sizes and Communication Models](#campaigns)
 6. [Strong and Weak Scaling](#scaling)
-7. [Reports and Visualizations](#plots)
-8. [Profiling](#profiling)
-9. [Methodology and Reproducibility](#methodology)
-10. [Tool Validation](#validation)
-11. [Cleaning the Build](#cleaning)
+7. [Running MGXBench with SLURM](#slurm)
+8. [Reports and Visualizations](#plots)
+9. [Profiling](#profiling)
+10. [Methodology and Reproducibility](#methodology)
+11. [Tool Validation](#validation)
+12. [Cleaning the Build](#cleaning)
 
 <a id="workflow"></a>
 ## 1. Choose a Workflow
@@ -46,11 +47,21 @@ The *asynchronous* labels describe the implemented strategy; they do not, by the
 <a id="installation"></a>
 ## 2. Environment Setup and Installation
 
-### 2.1 Navigate to the project directory
+### 2.1 Navigate to the project directory and command-line help
+
+MGXBench provides a command-line help interface that lists all available arguments, configuration options, and their descriptions.
+
+To display the available benchmark options, run:
 
 ```bash
 [username ~]$ cd MGXBench
+
+[username ~]$ python3 benchmark.py --help
+
 ```
+
+It is recommended to consult these commands before running experiments to verify the options supported by the installed version of MGXBench.
+
 
 ### 2.2 Prepare the cluster build and runtime environment
 
@@ -64,7 +75,7 @@ Building requires compatible versions of CMake, a C++ compiler, CUDA, MPI, NCCL,
 [username ~]$ mpirun --version
 [username ~]$ nvidia-smi
 ```
-Example module configuration for a specific SDumont environment (module names and versions may vary across clusters):
+Example module configuration for a specific environment (module names and versions may vary across clusters):
 
 ```bash
 [username ~]$ module load anaconda3/2020.07_sequana
@@ -86,11 +97,6 @@ The documented installer expects the static library `$NVSHMEM_HOME/lib/libnvshme
 
 The installer's default CUDA architecture is `70`. For a different architecture, set `CUDA_ARCH` to match the target GPU. The `--clean` option removes the build directory before rebuilding; use it only when a clean rebuild is needed.
 
-### 2.3 Install visualization dependencies
-
-```bash
-[username ~]$ python3 -m pip install -r configuration/requirements-viz.txt
-```
 
 <a id="first-benchmark"></a>
 ## 3. Run Your First Benchmark and Compare 1D vs. 2D
@@ -229,7 +235,7 @@ By default, a campaign includes both decompositions, rank counts of $1$ and $4$,
 <a id="scaling"></a>
 ## 6. Strong and Weak Scaling
 
-### 6.1 Strong scaling: fixed N, more GPUs
+### 6.1 `Strong` scaling: fixed N, more GPUs
 
 ```bash
 [username ~]$ python3 configuration/run_campaign.py \
@@ -242,19 +248,18 @@ By default, a campaign includes both decompositions, rank counts of $1$ and $4$,
               --label strong-N8192
 ```
 
-The `strong` mode requires exactly one matrix size. For each model and decomposition, compare measured execution times at the same matrix size. The 2D/SUMMA decomposition requires a square process grid (for example, 1, 2, or 4 ranks); incompatible configurations do not produce valid data points.
+The **strong** mode requires exactly one matrix size. For each model and decomposition, compare measured execution times at the same matrix size. The updated 2D/SUMMA implementation supports rectangular `Pr × Pc` process grids, where `Pr * Pc = p` and `N` must be divisible by both dimensions. The default is the closest factor pair to a square (for example, 4 → 2×2, 8 → 2×4, 12 → 3×4, and 16 → 4×4).
 
 $$
 S(p)=\frac{T(1)}{T(p)},\qquad E(p)=\frac{S(p)}{p}\times100\%.
 $$
 
-### 6.2 Weak scaling: approximately constant computational work per GPU
+### 6.2 `Weak` scaling: approximately constant computational work per GPU
 
 This is **compute-based weak scaling**, rather than memory-based weak scaling. This example requires resources and appropriate mapping for up to nine GPUs. $N$ increases approximately as $N(p) = N(1) \times p^{1/3}$ and is rounded to satisfy decomposition constraints. GPU memory usage is not held constant.
 
 The runner aligns the theoretical size to the nearest valid multiple using
-`d = lcm(--size-alignment, process-grid divisor)`, where the divisor is `p` for
-1D and `sqrt(p)` for 2D. The default is `--size-alignment 4`.
+`d = lcm(--size-alignment, process-grid divisor)`. For 1D the divisor is `p`; for rectangular 2D grids, `N` must be divisible by both `Pr` and `Pc`. Verify that the installed campaign runner supports the updated rectangular-grid constraints before executing weak-scaling campaigns. The default is `--size-alignment 4`.
 
 ```bash
 [username ~]$ python3 configuration/run_campaign.py \
@@ -277,10 +282,104 @@ the aligned dimensions (including their tiling constraints) before long runs.
 
 The runner rejects rounding choices that change the work per rank by more than $2.5%$. The plot allows at most a 5% variation between the largest and smallest $N^3 / p$ values, requires one configuration per $p$, a reference at $p = 1$, and a label beginning with `weak`. Weak-scaling efficiency is $E(p) = \frac{T(1)}{T(p)} \times 100\%$.
 
-Configurations incompatible with the 2D process grid or divisibility requirements are reported and skipped. Missing data points are never fabricated.
+Configurations incompatible with the selected 2D process grid or divisibility requirements are reported and skipped. Missing data points are never fabricated.
+
+<a id="slurm"></a>
+## 7. Running MGXBench with SLURM
+
+This example is based on specifical architecture and targets Sequana GPU partition. It requests **two nodes**, **four MPI ranks per node**, and **four GPUs per node**, for a total of **eight MPI ranks and eight GPUs**. The source configuration describes an inter-node Mellanox InfiniBand connection. Cluster account, partition, QoS, and module availability are site-specific and must be checked before submission.
+
+### 7.1 Prepare the batch script
+
+Save the following as `mgxbench-8gpu.slurm` in the MGXBench project root. The two loops run both 1D row-block and 2D SUMMA decompositions for `N = 4096, 8192, 16384`, evaluating all seven communication backends. For 2D, an explicit **2×4 rectangular MPI grid** and a SUMMA panel width of **256** are used.
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=MGXBench-8GPU
+#SBATCH --partition=sequana_gpu_dev
+#SBATCH --account=treinamento
+#SBATCH --qos=normal
+
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=4
+#SBATCH --gpus-per-node=4
+
+#SBATCH --output=slurm-%j.out
+#SBATCH --error=slurm-%j.err
+
+# Environment used in the source SLURM example.
+module load nvshmem/3.1.7_cuda-11.2_sequana
+module load anaconda3/2020.07_sequana
+module load cmake/3.30.3_sequana
+
+# 1D row-block, eight GPUs.
+for SIZE in 4096 8192 16384; do
+    echo "Running 1D: N=${SIZE}, GPUs=8"
+    python3 benchmark.py \
+        --decomposition 1d \
+        --size "${SIZE}" \
+        --ranks 8 \
+        --libraries MMM YYY CCC XXX NNN WWW SSS \
+        --warmup 1 \
+        --repeats 2 \
+        --plot \
+        --output results/1d
+done
+
+# 2D SUMMA, explicit rectangular 2 x 4 process grid.
+for SIZE in 4096 8192 16384; do
+    echo "Running 2D: N=${SIZE}, GPUs=8, grid=2x4"
+    python3 benchmark.py \
+        --decomposition 2d \
+        --size "${SIZE}" \
+        --ranks 8 \
+        --grid-rows 2 \
+        --grid-cols 4 \
+        --summa-bk 256 \
+        --libraries MMM YYY CCC XXX NNN WWW SSS \
+        --warmup 1 \
+        --repeats 2 \
+        --plot \
+        --output results/2d
+done
+```
+
+The script assumes that the MGXBench binaries have already been built and that the loaded modules expose the CUDA, MPI, NCCL, and NVSHMEM runtime dependencies required by your build. Check the environment as described in Section 2. A failed benchmark should stop the batch script rather than silently continue (`set -e`).
+
+### 7.2 Submit and monitor the job
+
+```bash
+[username ~]$ sbatch script_mgxbench-8gpu.slurm
+```
+
+SLURM allocates resources, while `benchmark.py` launches the MPI processes for each experiment. Do not add an extra `srun` around `benchmark.py` unless the launcher configuration has been explicitly adapted to avoid nested launches.
+
+### 7.3 Rectangular SUMMA grid parameters
+
+The updated 2D implementation supports a general `Pr × Pc` grid, where `Pr × Pc = --ranks` and the matrix dimension `N` is divisible by both `Pr` and `Pc`. The default grid is the factor pair closest to a square, with `Pr ≤ Pc`.
+
+| MPI ranks / GPUs | Default 2D grid | Default `--summa-bk` |
+|---:|:---:|---:|
+| 1 | 1×1 | 256 |
+| 2 | 1×2 | 256 |
+| 4 | 2×2 | 256 |
+| 6 | 2×3 | 256 |
+| 8 | 2×4 | 256 |
+| 12 | 3×4 | 256 |
+| 16 | 4×4 | 256 |
+| 32 | 4×8 | 256 |
+
+`--grid-rows`, `--grid-cols`, and `--summa-bk` are optional for ordinary runs. If only one grid dimension is provided, the other is inferred. The executable receives the selected values through `MGXBENCH_GRID_ROWS`, `MGXBENCH_GRID_COLS`, and `MGXBENCH_SUMMA_BK`. For an explicit grid, use:
+
+```bash
+python3 benchmark.py --decomposition 2d --size 8192 --ranks 8 \
+    --grid-rows 2 --grid-cols 4 --summa-bk 256 \
+    --libraries MMM YYY CCC XXX NNN WWW SSS \
+    --warmup 2 --repeats 3 --output results/rect-2x4
+```
 
 <a id="plots"></a>
-## 7. Reports and Visualizations
+## 8. Reports and Visualizations
 
 ### 7.1 Regenerate Reports from Saved Data
 
@@ -316,7 +415,7 @@ Additional filters include `--environment-id` and `--label`. A report is regener
 
 
 <a id="profiling"></a>
-## 8. Profiling
+## 9. Profiling
 
 To capture an execution profile within a GPU allocation, run:
 
@@ -350,38 +449,11 @@ The script expects **a CSV kernel summary** with `Name` or `Kernel Name` and a c
 
 Additional options: `--report gpukernsum`, `--report cuda_gpu_kern_sum`, `--nsys /path/to/nsys`, `--timeout 600`. Nsight does not need to be installed or run when the input is already a CSV file.
 
-### 8.2 Process All Four MPI Ranks
-
-```bash
-[username ~]$ for report in "$MGXBENCH_PROFILE_DIR"/rank-*.qdrep; do
-    [ -f "$report" ] || continue
-
-    rank_name=$(basename "$report" .qdrep)
-
-    python3 configuration/plot_nsys_stats.py "$report" \
-        --output-dir "$MGXBENCH_PROFILE_DIR/stats/$rank_name" \
-        --top 15 || break
-done
-```
-
-For newer captures, replace `.qdrep` with `.nsys-rep` in both the filename pattern and `basename`.
-
-### 8.3 Interpret the Plot
-
-The Y-axis lists kernel names. The X-axis shows each kernel's share of the **sum of recorded kernel durations**, not the application's total execution time. A 65% bar does not mean 65% GPU utilization. Concurrent kernel durations may be summed, and NCCL kernels represent communication.
-
-The original percentages are retained when selecting the top N entries, so the bars may add up to less than $100%$. Entries with duplicate names are preserved. Depending on the capture, initialization and validation kernels may appear in the summary.
-
-### 8.4 Try It Without Nsight Systems
-
-```bash
-[username ~]$ python3 configuration/plot_nsys_stats.py examples/nsys-stats/SYNTHETIC_gpukernsum.csv
-```
 
 <a id="methodology"></a>
-## 9. Methodology and Reproducibility
+## 10. Methodology and Reproducibility
 
-### 9.1 Samples and numerical validation
+### 10.1 Samples and numerical validation
 
 Warm-up runs are excluded from statistics. Each measured sample corresponds to one process launch; in 1D, it may represent the average of several inner iterations if requested. The default runner uses one iteration for both decompositions. A native 1D run without `MGXBENCH_INNER_LOOPS` retains ten iterations; set this variable to $1$ for comparable profiling.
 
@@ -389,13 +461,13 @@ The numerical validation described for this version uses constant-valued matrice
 
 The confidence interval uses a percentile bootstrap of the mean, with $2,000$ resamples and a fixed random seed; it is not computed for a single sample. A small number of repetitions yields fragile estimates. Three repetitions are useful for testing the workflow; increase this to $10$ or $30$ depending on the objective and observed variability. Additional repetitions do not fix an unstable environment.
 
-### 9.2 Grouping results
+### 10.2 Grouping results
 
 Reports group only data with compatible `environment_id`, `label`, and inner-iteration counts. Each comparison also accounts for decomposition, model, N, and p. Repeated runs of the same configuration combine their raw samples. Duplicate CSV summaries without samples are rejected because the underlying distribution cannot be reconstructed.
 
 JSON takes precedence over an adjacent CSV; overlapping entries are deduplicated. Older files without environment metadata are isolated by directory to avoid invalid comparisons. If a curve or comparison is missing, check these fields before assuming a plotting error.
 
-### 9.3 Record the environment
+### 10.3 Record the environment
 
 Use `examples/environment.json` as a template and fill in the GPU, CPU, nodes, interconnect, CUDA/MPI/NCCL/NVSHMEM versions, and build configuration:
 
@@ -410,7 +482,7 @@ The file must contain a JSON object. Example fields containing `null` must be re
 
 The environment identifier is strict: changes to the GPU, host, runtime, allocation, or binaries may split results into separate groups. Supplying the same JSON file does not force different environments to be treated as identical. For scaling studies, maintain a fixed allocation and controlled process placement whenever possible.
 
-### 9.4 GPU mapping and multi-node execution
+### 10.4 GPU mapping and multi-node execution
 
 The default `--device-map local` setting makes the runner pass `auto` to the executable. An MPI shared-memory communicator determines the local rank. If multiple GPUs are visible, the local index is selected; if only one is visible, device index zero is used.
 
@@ -419,7 +491,7 @@ When each process can see only one GPU, the scheduler must ensure that these are
 The default launcher is `mpirun`; placement options can be passed through `--launcher-args`. For multi-node execution, CUDA-aware MPI/NVSHMEM transport, symmetric heaps, affinity, and networking must be configured on the cluster. Local-rank support does not replace multi-node validation of each backend.
 
 <a id="validation"></a>
-## 10. Tool Validation
+## 11. Tool Validation
 
 ```bash
 [username ~]$ python3 -m unittest discover -s tests -v
@@ -429,7 +501,7 @@ The default launcher is `mpirun`; placement options can be passed through `--lau
 ```
 
 <a id="cleaning"></a>
-## 11. Cleaning the Build
+## 12. Cleaning the Build
 
 Remove compiled objects and binaries while retaining the CMake configuration:
 
@@ -454,3 +526,4 @@ To configure and build again after deleting `build/`, run:
 Neither cleaning method removes `results/`. Delete a specific result directory explicitly if you intend to discard its reports.
 
 ---
+

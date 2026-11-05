@@ -69,6 +69,9 @@ def main():
     ap.add_argument('--environment', help='JSON hardware/topology/software metadata shared across a campaign')
     ap.add_argument('--label', default='default', help='Experiment/campaign label')
     ap.add_argument('--device-map', choices=['local','explicit'], default='local')
+    ap.add_argument('--grid-rows',type=int,default=None,help='2D SUMMA process-grid rows; default automatic')
+    ap.add_argument('--grid-cols',type=int,default=None,help='2D SUMMA process-grid columns; default automatic')
+    ap.add_argument('--summa-bk',type=int,default=256,help='SUMMA reduction-panel width')
     args=ap.parse_args()
     if args.retries < 0: ap.error('retries must be nonnegative')
     if args.warmup_mode == 'internal' and args.decomposition != '1d': ap.error('internal warmup currently supports 1D only')
@@ -78,8 +81,14 @@ def main():
         ap.error('select distinct supported library codes')
     if args.size<=0 or args.ranks<=0 or args.repeats<=0 or args.warmup<0:ap.error('invalid size/ranks/repeats/warmup')
     if args.size%args.ranks and args.decomposition=='1d':ap.error('1D requires size divisible by ranks')
-    if args.decomposition=='2d' and math.isqrt(args.ranks)**2!=args.ranks:ap.error('2D SUMMA requires perfect square rank count')
-    if args.decomposition=='2d' and args.size%math.isqrt(args.ranks):ap.error('2D requires size divisible by sqrt(ranks)')
+    if args.summa_bk <= 0: ap.error('summa-bk must be positive')
+    if args.decomposition == '2d':
+        from configuration.grid import resolve_grid
+        try: grid_rows, grid_cols = resolve_grid(args.ranks,args.grid_rows,args.grid_cols)
+        except ValueError as exc: ap.error(str(exc))
+        if args.size % grid_rows or args.size % grid_cols: ap.error('2D requires N divisible by grid rows and columns')
+    elif args.grid_rows is not None or args.grid_cols is not None:
+        ap.error('--grid-rows/--grid-cols are only supported with 2D')
     for lib in args.libraries:
         if len(lib)!=3 or any(c not in 'MYCXNSW' for c in lib):ap.error('invalid three-character library code: '+lib)
     exe=pathlib.Path(args.build_dir).resolve()/('mm_1d' if args.decomposition=='1d' else 'mm_2d')
@@ -90,6 +99,10 @@ def main():
     if environment.get('gpu_topology'):
         (dest / 'gpu-topology.txt').write_text(environment['gpu_topology'] + '\n')
     child_env = os.environ.copy()
+    if args.decomposition == '2d':
+        child_env['MGXBENCH_GRID_ROWS'] = str(grid_rows)
+        child_env['MGXBENCH_GRID_COLS'] = str(grid_cols)
+        child_env['MGXBENCH_SUMMA_BK'] = str(args.summa_bk)
     child_env['MGXBENCH_INNER_LOOPS'] = str(args.inner_loops)
     child_env['MGXBENCH_INTERNAL_WARMUP'] = str(args.warmup if args.warmup_mode == 'internal' else 0)
     results=[]; failures=[]
