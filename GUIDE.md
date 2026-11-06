@@ -93,9 +93,7 @@ After loading the required modules, build the benchmark:
 [username ~]$ bash install.sh
 ```
 
-The documented installer expects the static library `$NVSHMEM_HOME/lib/libnvshmem.a`. Before building, make sure `NVSHMEM_HOME` is set and the file exists.
-
-The installer's default CUDA architecture is `70`. For a different architecture, set `CUDA_ARCH` to match the target GPU. The `--clean` option removes the build directory before rebuilding; use it only when a clean rebuild is needed.
+The documented installer expects the static library `$NVSHMEM_HOME/lib/libnvshmem.a`. Before building, make sure `NVSHMEM_HOME` is set and the file exists. The installer's default CUDA architecture is `70`. For a different architecture, set `CUDA_ARCH` to match the target GPU. The `--clean` option removes the build directory before rebuilding; use it only when a clean rebuild is needed.
 
 
 <a id="first-benchmark"></a>
@@ -287,7 +285,7 @@ Configurations incompatible with the selected 2D process grid or divisibility re
 <a id="slurm"></a>
 ## 7. Running MGXBench with SLURM
 
-This example is based on specifical architecture and targets Sequana GPU partition. It requests **two nodes**, **four MPI ranks per node**, and **four GPUs per node**, for a total of **eight MPI ranks and eight GPUs**. The source configuration describes an inter-node Mellanox InfiniBand connection. Cluster account, partition, QoS, and module availability are site-specific and must be checked before submission.
+This example is based on specifical architecture and targets with NVIDIA GPUs. It requests **two nodes**, **four MPI ranks per node**, and **four GPUs per node**, for a total of **eight MPI ranks and eight GPUs**. The source configuration describes an inter-node Mellanox InfiniBand connection. Cluster account, partition, QoS, and module availability are site-specific and must be checked before submission.
 
 ### 7.1 Prepare the batch script
 
@@ -344,7 +342,7 @@ for SIZE in 4096 8192 16384; do
 done
 ```
 
-The script assumes that the MGXBench binaries have already been built and that the loaded modules expose the CUDA, MPI, NCCL, and NVSHMEM runtime dependencies required by your build. Check the environment as described in Section 2. A failed benchmark should stop the batch script rather than silently continue (`set -e`).
+The script assumes that the MGXBench binaries have already been built and that the loaded modules expose the CUDA, MPI, NCCL, and NVSHMEM runtime dependencies required by your build. Check the environment as described in Section 2.
 
 ### 7.2 Submit and monitor the job
 
