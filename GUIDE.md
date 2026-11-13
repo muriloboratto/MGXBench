@@ -777,8 +777,11 @@ The autotuner should record the selected library, 2×2 process grid, and the **B
 For `extrapolation`, the implementation computes:
 
 $$
-p = \operatorname{clip}\left(\frac{\log(T_2/T_1)}{\log(N_2/N_1)},0,4\right),
-\qquad \widehat T(N)=T_1(N/N_1)^p.
+p = \mathrm{clip}\left(
+\frac{\log(T_2/T_1)}{\log(N_2/N_1)}, 0, 4
+\right),
+\qquad
+\widehat{T}(N) = T_1\left(\frac{N}{N_1}\right)^p.
 $$
 
 For an already measured size, it returns the stored time (or the median of duplicate measurements). For the 1D and 2D calibration commands above, extrapolation at N=$16384$ uses the two largest valid calibration sizes, N=$8192$ and N=$12288$, provided both measurements were accepted. If points are missing, the available endpoints are used. 
