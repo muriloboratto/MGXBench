@@ -32,6 +32,7 @@ MGXBench is a C++/CUDA benchmark for evaluating the execution performance of dis
 9. [Outputs and performance metrics](#outputs-and-performance-metrics)
 10. [Validation and interpretation](#validation-and-interpretation)
 11. [Cleaning the build](#cleaning-the-build)
+12. [Predictive autotuning](#predictive-autotuning)
 
 ## Benchmark design
 
@@ -84,6 +85,10 @@ MGXBench/
 │   ├── plot_benchmark.py
 │   ├── plot_nsys_stats.py
 │   └── requirements-viz.txt
+│
+├── autotuning/
+│   ├── predictive.py
+│   └── models/          
 │
 ├── tools/
 │   ├── profile_rank.sh
@@ -163,7 +168,10 @@ The `build/` and `results/` directories are created locally and are not required
 | `--decomposition` | Select `1d` or `2d` |
 | `--size` | Matrix dimension **N** (for an N × N problem) |
 | `--ranks` | Number of MPI ranks / participating GPUs |
-| `--libraries` | Communication implementations to evaluate |
+| `--libraries` | Communication implementations to evaluate; use `AUTO` alone for prediction |
+| `--prediction-model` | With `AUTO`: `extrapolation` (default), `ml` (Ridge), or `auto` |
+| `--grid-rows`, `--grid-cols` | Explicit SUMMA grid; with `AUTO`, restrict the candidate grid |
+| `--summa-bk` | SUMMA panel width for measured runs; AUTO selects BK from calibrated candidates |
 | `--warmup` | Warm-up runs before recorded measurements |
 | `--repeats` | Number of recorded runs per implementation |
 | `--output` | Destination directory for reports |

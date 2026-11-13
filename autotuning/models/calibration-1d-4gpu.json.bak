@@ -1,0 +1,224 @@
+{
+  "schema": 1,
+  "signature": {
+    "gpu_models": [
+      "Tesla V100-SXM2-32GB"
+    ],
+    "ranks": 4,
+    "decomposition": "1d",
+    "binary_sha256": "563bc081057fa4c3ebf29c484b928555342de768ad34fdf555535aa70e1b5d88",
+    "slurm_nodes": "1",
+    "driver_versions": [
+      "560.35.03"
+    ],
+    "cuda_visible_devices": "0,1,2,3",
+    "gpus_per_node": "4",
+    "id": "72548c4cc66850d8"
+  },
+  "sizes": [
+    2048,
+    4096,
+    6144,
+    8192,
+    12288
+  ],
+  "candidates": [
+    {
+      "library": "MMM",
+      "grid_rows": null,
+      "grid_cols": null,
+      "summa_bk": null,
+      "measurements": [
+        {
+          "size": 2048,
+          "median_s": 0.103043776
+        },
+        {
+          "size": 4096,
+          "median_s": 0.424725207
+        },
+        {
+          "size": 6144,
+          "median_s": 1.010862555
+        },
+        {
+          "size": 8192,
+          "median_s": 1.847890115
+        },
+        {
+          "size": 12288,
+          "median_s": 4.25967217
+        }
+      ]
+    },
+    {
+      "library": "YYY",
+      "grid_rows": null,
+      "grid_cols": null,
+      "summa_bk": null,
+      "measurements": [
+        {
+          "size": 2048,
+          "median_s": 0.061366949
+        },
+        {
+          "size": 4096,
+          "median_s": 0.247109467
+        },
+        {
+          "size": 6144,
+          "median_s": 0.557878294
+        },
+        {
+          "size": 8192,
+          "median_s": 1.006366332
+        },
+        {
+          "size": 12288,
+          "median_s": 2.169829495
+        }
+      ]
+    },
+    {
+      "library": "CCC",
+      "grid_rows": null,
+      "grid_cols": null,
+      "summa_bk": null,
+      "measurements": [
+        {
+          "size": 2048,
+          "median_s": 0.019065571
+        },
+        {
+          "size": 4096,
+          "median_s": 0.044629315
+        },
+        {
+          "size": 6144,
+          "median_s": 0.101671241
+        },
+        {
+          "size": 8192,
+          "median_s": 0.20157481
+        },
+        {
+          "size": 12288,
+          "median_s": 0.580649417
+        }
+      ]
+    },
+    {
+      "library": "XXX",
+      "grid_rows": null,
+      "grid_cols": null,
+      "summa_bk": null,
+      "measurements": [
+        {
+          "size": 2048,
+          "median_s": 0.014998126
+        },
+        {
+          "size": 4096,
+          "median_s": 0.03598777
+        },
+        {
+          "size": 6144,
+          "median_s": 0.087655551
+        },
+        {
+          "size": 8192,
+          "median_s": 0.185323148
+        },
+        {
+          "size": 12288,
+          "median_s": 0.585701432
+        }
+      ]
+    },
+    {
+      "library": "NNN",
+      "grid_rows": null,
+      "grid_cols": null,
+      "summa_bk": null,
+      "measurements": [
+        {
+          "size": 2048,
+          "median_s": 0.003492346
+        },
+        {
+          "size": 4096,
+          "median_s": 0.022605584
+        },
+        {
+          "size": 6144,
+          "median_s": 0.061193911
+        },
+        {
+          "size": 8192,
+          "median_s": 0.139820363
+        },
+        {
+          "size": 12288,
+          "median_s": 0.486666622
+        }
+      ]
+    },
+    {
+      "library": "WWW",
+      "grid_rows": null,
+      "grid_cols": null,
+      "summa_bk": null,
+      "measurements": [
+        {
+          "size": 2048,
+          "median_s": 0.003614371
+        },
+        {
+          "size": 4096,
+          "median_s": 0.021834916
+        },
+        {
+          "size": 6144,
+          "median_s": 0.066911847
+        },
+        {
+          "size": 8192,
+          "median_s": 0.150197927
+        },
+        {
+          "size": 12288,
+          "median_s": 0.482884216
+        }
+      ]
+    },
+    {
+      "library": "SSS",
+      "grid_rows": null,
+      "grid_cols": null,
+      "summa_bk": null,
+      "measurements": [
+        {
+          "size": 2048,
+          "median_s": 0.003371738
+        },
+        {
+          "size": 4096,
+          "median_s": 0.022056505
+        },
+        {
+          "size": 6144,
+          "median_s": 0.070814964
+        },
+        {
+          "size": 8192,
+          "median_s": 0.163433334
+        },
+        {
+          "size": 12288,
+          "median_s": 0.547905261
+        }
+      ]
+    }
+  ],
+  "warning": "Empirical calibration; predictions are estimates, not measured timings"
+}

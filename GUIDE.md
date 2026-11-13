@@ -15,7 +15,8 @@ A practical guide to running MGXBench benchmarks in multi-GPU environments, comp
 9. [Profiling](#profiling)
 10. [Methodology and Reproducibility](#methodology)
 11. [Tool Validation](#validation)
-12. [Cleaning the Build](#cleaning)
+12. [Predictive Autotuning](#autotuning)
+13. [Cleaning the Build](#cleaning)
 
 <a id="workflow"></a>
 ## 1. Choose a Workflow
@@ -39,6 +40,7 @@ The *asynchronous* labels describe the implemented strategy; they do not, by the
 | Benchmark a single configuration | `benchmark.py` | CSV, JSON, and logs |
 | Benchmark multiple sizes/GPU counts | `configuration/run_campaign.py` | Run history and final report |
 | Generate or regenerate plots | `configuration/plot_benchmark.py` | PNG, PDF, HTML, Markdown, and consolidated summary table |
+| Predict the fastest calibrated configuration | `autotuning.predictive calibrate`, then `benchmark.py --libraries AUTO` | Calibration JSON and prediction ranking |
 | Capture execution activity | `tools/profile_rank.sh`, via MPI | Per-rank Nsight capture |
 | Inspect capture statistics | `nsys stats` | Terminal tables or CSV |
 | Plot a kernel summary | `configuration/plot_nsys_stats.py` | Per-kernel bar charts in PNG/PDF |
@@ -144,7 +146,8 @@ Open `results/comparison/report.html` on your computer, keeping the images in th
 | `--decomposition` | Selects `1d` or `2d` |
 | `--size` | Matrix dimension N for an N × N matrix |
 | `--ranks` | Number of MPI processes; typically one per GPU |
-| `--libraries` | Models to run, without duplicate codes |
+| `--libraries` | Models to run, or `AUTO` alone to predict |
+| `--prediction-model` | `extrapolation`, `ml`, or `auto`, used with `AUTO` |
 | `--warmup` | Initial runs excluded from statistics |
 | `--repeats` | Number of measured runs per model |
 | `--plot` | Generates plots for this configuration after measurement |
@@ -370,10 +373,17 @@ The updated 2D implementation supports a general `Pr × Pc` grid, where `Pr × P
 `--grid-rows`, `--grid-cols`, and `--summa-bk` are optional for ordinary runs. If only one grid dimension is provided, the other is inferred. The executable receives the selected values through `MGXBENCH_GRID_ROWS`, `MGXBENCH_GRID_COLS`, and `MGXBENCH_SUMMA_BK`. For an explicit grid, use:
 
 ```bash
-python3 benchmark.py --decomposition 2d --size 8192 --ranks 8 \
-    --grid-rows 2 --grid-cols 4 --summa-bk 256 \
-    --libraries MMM YYY CCC XXX NNN WWW SSS \
-    --warmup 2 --repeats 3 --output results/rect-2x4
+[username ~]$  python3 benchmark.py \
+               --decomposition 2d \
+               --size 8192 \
+               --ranks 8 \
+               --grid-rows 2 \
+               --grid-cols 4 \
+               --summa-bk 256 \
+               --libraries MMM YYY CCC XXX NNN WWW SSS \
+               --warmup 2 \
+               --repeats 3 \
+               --output results/rect-2x4
 ```
 
 <a id="plots"></a>
@@ -470,8 +480,13 @@ JSON takes precedence over an adjacent CSV; overlapping entries are deduplicated
 Use `examples/environment.json` as a template and fill in the GPU, CPU, nodes, interconnect, CUDA/MPI/NCCL/NVSHMEM versions, and build configuration:
 
 ```bash
-[username ~]$ python3 benchmark.py --decomposition 1d --size 4096 --ranks 4 \
-              --libraries MMM NNN --warmup 2 --repeats 3 \
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 4096 \
+              --ranks 4 \
+              --libraries MMM NNN \
+              --warmup 2 \
+              --repeats 3 \
               --environment examples/environment.json \
               --output results/sdumont
 ```
@@ -497,9 +512,386 @@ The default launcher is `mpirun`; placement options can be passed through `--lau
 [username ~]$ bash -n tools/profile_rank.sh
 [username ~]$ bash -n tools/stats_rank.sh
 ```
+---
+<a id="autotuning"></a>
+## 12. Predictive Autotuning
+
+The autotuner predicts execution time from empirical calibration and ranks compatible candidates. It selects among configurations that were successfully calibrated; it does not search unmeasured libraries, grids, or BK values. The commands below describe the documented interface. Confirm that your installed version supports `--auto-validate` and `--auto-feedback` before running the extended workflows.
+
+### 12.1 Prerequisites and data flow
+
+Build MGXBench first, then run from the project root within a GPU allocation. Use the same GPU/runtime/build/allocation configuration for calibration and prediction. The signature includes GPU model and driver, ranks, decomposition, CUDA visibility, and recorded SLURM allocation fields. It is not a complete fingerprint of interconnect topology or every runtime setting.
+
+```bash
+[username ~]$ python3 -m autotuning.predictive calibrate --help
+[username ~]$ python3 -m autotuning.predictive auto --help
+```
+
+### 12.2 `1D autotuning with four GPU` 
+
+#### 12.2.1 Calibration
+
+```bash
+[username ~]$ python3 -m autotuning.predictive calibrate \
+              --decomposition 1d \
+              --ranks 4 \
+              --sizes 2048 4096 6144 8192 12288 \
+              --libraries MMM YYY CCC XXX NNN WWW SSS \
+              --warmup  2 \
+              --repeats 3 \
+              --output results/auto_calibration_1d_4gpu
+```
+
+#### 12.2.2 Prediction: power-law extrapolation and Ridge regression
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 16384 \
+              --ranks 4 \
+              --libraries AUTO \
+              --prediction-model extrapolation \
+              --output results/prediction_extrapolation_1d
+```
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 16384 \
+              --ranks 4 \
+              --libraries AUTO \
+              --prediction-model ml \
+              --output results/prediction_ridge_1d
+```
+
+#### 12.2.3 Validation of the selected configuration
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 16384 \
+              --ranks 4 \
+              --libraries AUTO \
+              --prediction-model extrapolation \
+              --auto-validate \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/validation_extrapolation_1d
+
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 16384 \
+              --ranks 4 \
+              --libraries AUTO \
+              --prediction-model ml \
+              --auto-validate \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/validation_ridge_1d
+```
+
+#### 12.2.4 Ground truth across all seven implementations
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 16384 \
+              --ranks 4 \
+              --libraries MMM YYY CCC XXX NNN WWW SSS \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/ground_truth_1d_16384
+```
+
+#### 12.2.5 Adaptive feedback with power-law extrapolation
+
+Run this only after collecting independent validation results, because feedback may add N=16384 to the training set.
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 16384 \
+              --ranks 4 \
+              --libraries AUTO \
+              --prediction-model extrapolation \
+              --auto-validate \
+              --auto-feedback \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/prediction_ridge_feedback_1d
+```
+
+
+#### 12.2.6 Adaptive feedback with Ridge regression
+
+Run this only after collecting independent validation results, because feedback may add N=$16384$ to the training set.
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 1d \
+              --size 16384 \
+              --ranks 4 \
+              --libraries AUTO \
+              --prediction-model ml \
+              --auto-validate \
+              --auto-feedback \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/prediction_ridge_feedback_1d
+```
+
+### 12.3 `2D SUMMA autotuning with four GPUs`
+
+#### 12.3.1 Calibration
+
+```bash
+[username ~]$ python3 -m autotuning.predictive calibrate \
+              --decomposition 2d \
+              --ranks 4 \
+              --sizes 2048 4096 6144 8192 12288 \
+              --grids 2x2 \
+              --bks 128 256 \
+              --libraries MMM YYY CCC XXX NNN WWW SSS \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/auto_calibration_2d_4gpu
+```
+
+#### 12.3.2 Prediction: power-law extrapolation and Ridge regression
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 2d \
+              --size 16384 \
+              --ranks 4 \
+              --grid-rows 2 \
+              --grid-cols 2 \
+              --libraries AUTO \
+              --prediction-model extrapolation \
+              --output results/prediction_extrapolation_2d
+
+[username ~]$ python3 benchmark.py \
+              --decomposition 2d \
+              --size 16384 \
+              --ranks 4 \
+              --grid-rows 2 \
+              --grid-cols 2 \
+              --libraries AUTO \
+              --prediction-model ml \
+              --output results/prediction_ridge_2d
+```
+
+#### 12.3.3 Validation of the selected configuration
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 2d \
+              --size 16384 \
+              --ranks 4 \
+              --grid-rows 2 \
+              --grid-cols 2 \
+              --libraries AUTO \
+              --prediction-model extrapolation \
+              --auto-validate \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/validation_extrapolation_2d
+
+[username ~]$ python3 benchmark.py \
+              --decomposition 2d \
+              --size 16384 \
+              --ranks 4 \
+              --grid-rows 2 \
+              --grid-cols 2 \
+              --libraries AUTO \
+              --prediction-model ml \
+              --auto-validate \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/validation_ridge_2d
+```
+
+#### 12.3.4 Ground truth for a fixed SUMMA block size
+
+This command tests **BK=128 only**. To establish ground truth across both calibrated block sizes, repeat the benchmark with `--summa-bk 256` and a distinct output directory.
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 2d \
+              --size 16384 \
+              --ranks 4 \
+              --grid-rows 2 \
+              --grid-cols 2 \
+              --summa-bk 128 \
+              --libraries MMM YYY CCC XXX NNN WWW SSS \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/ground_truth_2d_16384_bk128
+```
+
+
+#### 12.3.5 Adaptive feedback
+
+The autotuner should record the selected library, 2×2 process grid, and the **BK actually selected from calibration**. Do not assume that the ordinary `--summa-bk` flag restricts AUTO candidate selection.
+
+```bash
+[username ~]$ python3 benchmark.py \
+              --decomposition 2d \
+              --size 16384 \
+              --ranks 4 \
+              --grid-rows 2 \
+              --grid-cols 2 \
+              --libraries AUTO \
+              --prediction-model extrapolation \
+              --auto-validate \
+              --auto-feedback \
+              --warmup 2 \
+              --repeats 3 \
+              --output results/prediction_ridge_feedback_2d
+```
+
+```bash
+[username ~]$ python3 benchmark.py \
+                --decomposition 2d \
+                --size 16384 \
+                --ranks 4 \
+                --grid-rows 2 \
+                --grid-cols 2 \
+                --libraries AUTO \
+                --prediction-model ml \
+                --auto-validate \
+                --auto-feedback \
+                --warmup 2 \
+                --repeats 3 \
+                --output results/prediction_ridge_feedback_2d
+```
+
+### 12.4 What the prediction methods compute
+
+| Option | Data used per candidate | Model |
+|---|---|---|
+| `extrapolation` | Two neighboring points; the two endpoint sizes outside the measured interval | Local power law in log-log space |
+| `ml` | All valid calibration measurements | Ridge regression on log(time) |
+| `auto` | Checks the minimum distinct-size count across all stored candidates | Ridge if that minimum is at least four and imports succeed; otherwise power law |
+
+For `extrapolation`, the implementation computes:
+
+$$
+p = \operatorname{clip}\left(\frac{\log(T_2/T_1)}{\log(N_2/N_1)},0,4\right),
+\qquad \widehat T(N)=T_1(N/N_1)^p.
+$$
+
+For an already measured size, it returns the stored time (or the median of duplicate measurements). For the 1D and 2D calibration commands above, extrapolation at N=$16384$ uses the two largest valid calibration sizes, N=$8192$ and N=$12288$, provided both measurements were accepted. If points are missing, the available endpoints are used. 
+
+For Ridge, with candidate `c` and the minimum eligible measured size `Nref`:
+
+$$
+\log \widehat T_c(N)=b_c+w_c\log(N/N_{\mathrm{ref}}),
+\qquad \widehat T_c(N)=e^{b_c}(N/N_{\mathrm{ref}})^{w_c}.
+$$
+
+The feature representation uses candidate-specific indicator and log-size interaction terms. The code uses `Ridge(alpha=0.05, fit_intercept=False)`, minimizing squared log-time error plus an L2 penalty on all coefficients, including the explicit candidate intercepts. Candidate coefficients are separate; the fit does not learn shared hardware/API features. Unlike the local method, Ridge has no explicit exponent bound and does not necessarily reproduce a calibration time exactly. 
+
+The `auto` choice does not perform cross-validation or compare prediction errors. Neither method produces uncertainty intervals, learns performance across GPU counts, or guarantees correctness beyond the calibration range.
+
+### 12.5 Read predictions and measure the selected configuration
+
+`--libraries AUTO` must be used alone. In prediction-only mode, it loads calibration data, checks the environment signature, ranks compatible candidates, and exits without running the target multiplication. The `--auto-validate` and `--auto-feedback` flags are intended to extend that behavior; their exact implementation must be verified.
+
+A prediction-only run writes `<output>/autotuning_prediction.json`:
+
+| Field | Meaning |
+|---|---|
+| `best` | Selected library, grid, BK, predicted seconds, and extrapolation flag |
+| `ranking` | All compatible predictions sorted by time |
+| `prediction_model` | Method actually used (`extrapolation` or `ml`) |
+| `speedup_vs_MPI_predicted` | Predicted MMM time / best time, using the best candidate's grid and BK; null if that baseline is absent |
+| `status`, `measured` | `PREDICTED`, `false` |
+| `architecture_id` | Matched calibration/environment signature identifier |
+
+The displayed improvement is `(1 - 1/speedup) × 100%`. These are predictions, not measured speedups. Both Ridge and the power-law method report `extrapolated=true` when the target lies outside a candidate's observed size range.
+
+These are conditional examples, not claims about the winning implementation. Replace the library/grid/BK with each model's actual selection. If the models select different candidates, measure both. Compare predicted seconds with measured `median_s`, since calibration uses medians:
+
+$$
+\mathrm{Relative\ error}(\%)=100\frac{|\widehat T-T_{\mathrm{measured}}|}{T_{\mathrm{measured}}}.
+$$
+
+The ordinary benchmark's `speedup_vs_MMM` uses means, so distinguish it from a median-based comparison. Measuring only the selected candidate and MMM tests those configurations; establishing the actual fastest candidate requires measurements across the target-size candidate set. Reserve sizes not included in calibration for independent extrapolation evaluation.
+
+### 12.6 Manage calibration files and troubleshoot
+
+The prediction entry point currently reads the fixed active path `autotuning/models/calibration.json`. Calibration supports `--model` to save elsewhere, but prediction has no model-path option in the supplied interface. To reuse the archived 1D model after the 2D example:
+
+```bash
+[username ~]$ cp autotuning/models/calibration-1d-4gpu.json autotuning/models/calibration.json
+```
+
+Restore only a model compatible with the current allocation/build. Archive names here identify decomposition and ranks; use additional descriptive names for different hardware or builds. Changing `--output` separates reports but does not select another calibration model.
+
+| Symptom | Action |
+|---|---|
+| `AUTO model missing` | Calibrate, or restore a compatible model at the active path. |
+| Signature mismatch | Restore the correct calibration or recalibrate under the current build/allocation. |
+| No compatible candidates | Inspect calibration logs, ensure two valid sizes per candidate, and check target/grid divisibility. |
+| Missing NumPy/scikit-learn with `ml` | Install compatible dependencies in the executing Python environment, or use `extrapolation`. Explicit `ml` does not silently fall back. |
+| Calibration produces no valid candidates | Inspect `<output>/calibration_logs/` and benchmark failures; the partial file preserves progress without replacing a previous valid model. |
+
+Calibration stores matching benchmark reports under `<output>/runs/`, launch commands/stdout/stderr under `<output>/calibration_logs/`, and accepted data in the model JSON. It writes a `.partial.json` checkpoint after each candidate and replaces the requested model only when at least one candidate is eligible. The JSON stores empirical samples; Ridge is fitted when prediction runs, rather than stored as a serialized estimator.
+
+For cluster launch placement, calibration accepts `--launcher`, `--launcher-args`, and `--build-dir`. Use scheduler-compatible placement for all calibration and validation runs. GPU-memory or transport failures are failed measurements, not evidence that a candidate is inherently slow.
+
+---
+
+### 12.7 Experimental workflow and validation strategy
+
+| Phase | Purpose | Training data modified? |
+|---|---|---|
+| Calibration | Measure candidates at known sizes and build the empirical model | Yes, creates/replaces calibration data |
+| Prediction | Rank compatible candidates at an unseen target size | No |
+| `--auto-validate` | Measure the selected candidate and compare predicted versus observed time, if implemented | Normally no |
+| Ground truth | Measure every specified library at the target size | No automatic autotuner update |
+| `--auto-feedback` | Measure a selected candidate and add a validated observation for later predictions, if implemented | Intended: yes |
+
+
+
+### 12.8 What changes after feedback?
+
+**Intended feedback lifecycle:** (1) predict the fastest compatible candidate; (2) execute and numerically validate that candidate; (3) obtain a valid observed execution time, preferably a median consistent with calibration; (4) append/update that candidate's empirical measurements in the matching calibration model; (5) save the updated calibration; (6) refit Ridge on a later prediction (or immediately if explicitly implemented).
+
+The baseline guide documents **empirical measurements persisted in `autotuning/models/calibration.json`, not a serialized Ridge estimator**. Ridge is fitted when a prediction is requested. Therefore, if feedback writes a valid new measurement to the active calibration file, a subsequent prediction can refit Ridge using the expanded data. Do not claim that feedback updates a stored `.pkl` model unless code actually creates one.
+
+For 1D, the feedback observation must identify at least `(decomposition=1d, ranks, library, N, measured time, environment signature)`. For 2D it must additionally identify `(grid_rows, grid_cols, summa_bk)`. A measurement of `XXX` at BK 128 is **not** a measurement of `XXX` at BK 256, nor of `SSS`. A four-GPU measurement must not be mixed into an eight-GPU calibration.
+
+The documented Ridge model is **log-linear per candidate**, not cubic polynomial regression:
+
+$$
+\log \widehat{T}_c(N)=b_c+w_c\log(N/N_{\mathrm{ref}}).
+$$
+
+Adding a new measured `(N, T)` observation changes the training set. Upon refitting, the candidate coefficients may change, modifying future time estimates and potentially the selected library/grid/BK.  Illustrative example:
+
+| Quantity | Example |
+|---|---:|
+| Predicted time at N=16384 | 0.75 s |
+| Observed median | 0.90 s |
+| Absolute percentage error | 16.67% |
+| New training observation | N=16384, T=0.90 s, selected candidate |
+
+The error is $100|\widehat T-T|/T$. After feedback, do **not** evaluate model generalization on the same observation that has just been added to training. Use a held-out size or candidate, and preserve the pre-feedback prediction for comparison.
+
+### 12.9 Verification checklist
+
+1. `python3 benchmark.py --help` lists both flags.
+2. `--auto-validate` actually executes and measures the selected candidate (rather than only producing `PREDICTED`).
+3. `--auto-feedback` persists a validated observation for the **correct candidate** in the correct calibration file.
+4. A subsequent `--prediction-model ml` invocation reads that file and refits Ridge; compare predictions before/after on a held-out N.
+5. If the file is unchanged, do not report that the model was updated. Inspect the implementation/logs instead.
+
+---
 
 <a id="cleaning"></a>
-## 12. Cleaning the Build
+## 13. Cleaning the Build
 
 Remove compiled objects and binaries while retaining the CMake configuration:
 
@@ -524,4 +916,3 @@ To configure and build again after deleting `build/`, run:
 Neither cleaning method removes `results/`. Delete a specific result directory explicitly if you intend to discard its reports.
 
 ---
-

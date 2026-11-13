@@ -72,7 +72,19 @@ def main():
     ap.add_argument('--grid-rows',type=int,default=None,help='2D SUMMA process-grid rows; default automatic')
     ap.add_argument('--grid-cols',type=int,default=None,help='2D SUMMA process-grid columns; default automatic')
     ap.add_argument('--summa-bk',type=int,default=256,help='SUMMA reduction-panel width')
+    ap.add_argument('--prediction-model', choices=['extrapolation', 'ml', 'auto'],
+                    default='extrapolation', help='Prediction method when --libraries AUTO')
+    ap.add_argument('--auto-model', default=None, help='Calibration JSON; default per decomposition/ranks')
+    ap.add_argument('--auto-validate', action='store_true', help='Measure the selected AUTO candidate')
+    ap.add_argument('--auto-feedback', action='store_true', help='Add validated AUTO measurement to calibration (requires --auto-validate)')
     args=ap.parse_args()
+    if args.auto_feedback and not args.auto_validate:
+        ap.error('--auto-feedback requires --auto-validate')
+    if args.libraries == ['AUTO']:
+        from autotuning.predictive import auto
+        return auto(args)
+    if 'AUTO' in args.libraries:
+        ap.error('AUTO must be the only value of --libraries')
     if args.retries < 0: ap.error('retries must be nonnegative')
     if args.warmup_mode == 'internal' and args.decomposition != '1d': ap.error('internal warmup currently supports 1D only')
     if args.inner_loops < 1 or (args.decomposition == '2d' and args.inner_loops != 1):
@@ -189,3 +201,6 @@ def main():
     if failures or not results:return 2
     return 0
 if __name__=='__main__':sys.exit(main())
+
+
+

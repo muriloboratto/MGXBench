@@ -1,0 +1,34 @@
+name: MGXBench CMake Validation
+
+on:
+  push:
+    branches: [main]
+
+  pull_request:
+    branches: [main]
+
+  workflow_dispatch:
+
+jobs:
+  cmake-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show CMake version
+        run: cmake --version
+
+      - name: Check CMakeLists.txt
+        run: |
+          test -f CMakeLists.txt
+          echo "CMakeLists.txt found"
+
+      - name: Check project structure
+        run: |
+          test -f 1D-row-block/mmb.cu
+          test -f 2D-block-matrix/mmb.cu
+          test -f 1D-row-block/mulmat_kernel.cu
+          test -f 2D-block-matrix/mulmat_kernel.cu
+          echo "CUDA source files found"
