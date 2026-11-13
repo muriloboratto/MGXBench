@@ -817,9 +817,11 @@ The displayed improvement is `(1 - 1/speedup) × 100%`. These are predictions, n
 These are conditional examples, not claims about the winning implementation. Replace the library/grid/BK with each model's actual selection. If the models select different candidates, measure both. Compare predicted seconds with measured `median_s`, since calibration uses medians:
 
 $$
-\mathrm{Relative\ error}(\%)=100\frac{|\widehat T-T_{\mathrm{measured}}|}{T_{\mathrm{measured}}}.
+\mathrm{RelativeError}(\%) =
+100 \times
+\frac{|\widehat{T} - T_{\mathrm{measured}}|}
+{T_{\mathrm{measured}}}
 $$
-
 The ordinary benchmark's `speedup_vs_MMM` uses means, so distinguish it from a median-based comparison. Measuring only the selected candidate and MMM tests those configurations; establishing the actual fastest candidate requires measurements across the target-size candidate set. Reserve sizes not included in calibration for independent extrapolation evaluation.
 
 ### 12.6 Manage calibration files and troubleshoot
