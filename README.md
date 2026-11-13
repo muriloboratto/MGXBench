@@ -32,7 +32,6 @@ MGXBench is a C++/CUDA benchmark for evaluating the execution performance of dis
 9. [Outputs and performance metrics](#outputs-and-performance-metrics)
 10. [Validation and interpretation](#validation-and-interpretation)
 11. [Cleaning the build](#cleaning-the-build)
-12. [Predictive autotuning](#predictive-autotuning)
 
 ## Benchmark design
 
