@@ -1,51 +1,150 @@
-cmake_minimum_required(VERSION 3.22)
-project(distributed_mm_benchmark LANGUAGES CXX CUDA)
+cmake_minimum_required(VERSION 3.24)
 
-find_package(MPI REQUIRED COMPONENTS CXX)
-find_package(CUDAToolkit REQUIRED)
-find_package(OpenMP)
+# ============================================================
+# MGXBench - Multi-GPU Execution Benchmark
+# CUDA / MPI / NCCL / NVSHMEM
+#
+# Supported architectures:
+#   NVIDIA V100       : sm_70 (CUDA 11.x/12.x)
+#   NVIDIA H100/GH200 : sm_90 (CUDA 13.x)
+# ============================================================
 
-find_path(NCCL_INCLUDE_DIR NAMES nccl.h HINTS ENV NCCL_HOME PATH_SUFFIXES include REQUIRED)
-find_library(NCCL_LIBRARY NAMES nccl HINTS ENV NCCL_HOME PATH_SUFFIXES lib lib64 REQUIRED)
-find_path(NVSHMEM_INCLUDE_DIR NAMES nvshmem.h HINTS ENV NVSHMEM_HOME PATH_SUFFIXES include REQUIRED)
-
-# NVSHMEM releases differ: some provide libnvshmem.so; newer installations
-# can provide libnvshmem_host.so plus libnvshmem_device.a.
-find_library(NVSHMEM_LIBRARY NAMES nvshmem nvshmem_host
-  HINTS ENV NVSHMEM_HOME PATH_SUFFIXES lib lib64 REQUIRED)
-# Split NVSHMEM distributions require host and device libraries.
-# Legacy monolithic libnvshmem.a must NOT be combined with nvshmem_device.
-set(NVSHMEM_LINK_LIBRARIES "${NVSHMEM_LIBRARY}")
-if(NVSHMEM_LIBRARY MATCHES "nvshmem_host")
-  find_library(NVSHMEM_DEVICE_LIBRARY NAMES nvshmem_device
-    HINTS ENV NVSHMEM_HOME PATH_SUFFIXES lib lib64 REQUIRED)
-  list(APPEND NVSHMEM_LINK_LIBRARIES "${NVSHMEM_DEVICE_LIBRARY}")
-  message(STATUS "Using split NVSHMEM: ${NVSHMEM_LIBRARY} + ${NVSHMEM_DEVICE_LIBRARY}")
-else()
-  message(STATUS "Using monolithic NVSHMEM: ${NVSHMEM_LIBRARY}")
+# CUDA architecture can be overridden externally.
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native)
 endif()
-find_library(NVML_LIBRARY NAMES nvidia-ml HINTS /usr/lib64 /usr/lib/x86_64-linux-gnu)
 
-foreach(variant IN ITEMS 1D-row-block 2D-block-matrix)
-  if(variant STREQUAL "1D-row-block")
-    set(exe mm_1d)
-  else()
-    set(exe mm_2d)
-  endif()
-  add_executable(${exe} ${variant}/mmb.cu ${variant}/mulmat_kernel.cu)
-  target_include_directories(${exe} PRIVATE ${NCCL_INCLUDE_DIR} ${NVSHMEM_INCLUDE_DIR})
-  target_link_libraries(${exe} PRIVATE MPI::MPI_CXX CUDA::cudart CUDA::cuda_driver
-    ${NCCL_LIBRARY} ${NVSHMEM_LINK_LIBRARIES})
-  # CUDA separable compilation performs device linking for split NVSHMEM.
+project(MGXBench LANGUAGES CXX CUDA)
 
-  if(NVML_LIBRARY)
-    target_link_libraries(${exe} PRIVATE ${NVML_LIBRARY})
-  endif()
-  if(OpenMP_CXX_FOUND)
-    target_link_libraries(${exe} PRIVATE OpenMP::OpenMP_CXX)
-    target_compile_options(${exe} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>)
-  endif()
-  set_target_properties(${exe} PROPERTIES CUDA_SEPARABLE_COMPILATION ON CUDA_STANDARD 14)
-endforeach()
+# ============================================================
+# C++ and CUDA standards
+# ============================================================
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_EXTENSIONS OFF)
+
+# ============================================================
+# Dependencies
+# ============================================================
+
+find_package(CUDAToolkit REQUIRED)
+find_package(MPI REQUIRED COMPONENTS CXX)
+
+# NCCL
+find_path(NCCL_INCLUDE_DIR
+    NAMES nccl.h
+    HINTS ENV NCCL_HOME ENV NCCL_ROOT
+    PATH_SUFFIXES include
+    REQUIRED
+)
+
+find_library(NCCL_LIBRARY
+    NAMES nccl
+    HINTS ENV NCCL_HOME ENV NCCL_ROOT
+    PATH_SUFFIXES lib lib64
+    REQUIRED
+)
+
+# NVSHMEM include directory
+find_path(NVSHMEM_INCLUDE_DIR
+    NAMES nvshmem.h
+    HINTS ENV NVSHMEM_HOME ENV NVSHMEM_ROOT
+    PATH_SUFFIXES include
+    REQUIRED
+)
+
+# NVSHMEM host library
+find_library(NVSHMEM_HOST_LIBRARY
+    NAMES nvshmem_host
+    HINTS ENV NVSHMEM_HOME ENV NVSHMEM_ROOT
+    PATH_SUFFIXES lib lib64
+    REQUIRED
+)
+
+# NVSHMEM device library
+find_library(NVSHMEM_DEVICE_LIBRARY
+    NAMES nvshmem_device
+    HINTS ENV NVSHMEM_HOME ENV NVSHMEM_ROOT
+    PATH_SUFFIXES lib lib64
+    REQUIRED
+)
+
+# ============================================================
+# Shared dependencies
+# ============================================================
+
+add_library(mgx_dependencies INTERFACE)
+
+target_include_directories(mgx_dependencies INTERFACE
+    ${NCCL_INCLUDE_DIR}
+    ${NVSHMEM_INCLUDE_DIR}
+)
+
+target_link_libraries(mgx_dependencies INTERFACE
+    MPI::MPI_CXX
+    CUDA::cudart
+    ${NCCL_LIBRARY}
+    ${NVSHMEM_HOST_LIBRARY}
+    ${NVSHMEM_DEVICE_LIBRARY}
+)
+
+# ============================================================
+# 1D Row-Block Matrix Multiplication
+# ============================================================
+
+add_executable(mm_1d
+    1D-row-block/mmb.cu
+    1D-row-block/mulmat_kernel.cu
+)
+
+target_link_libraries(mm_1d PRIVATE
+    mgx_dependencies
+)
+
+# ============================================================
+# 2D SUMMA Matrix Multiplication
+# ============================================================
+
+add_executable(mm_2d
+    2D-block-matrix/mmb.cu
+    2D-block-matrix/mulmat_kernel.cu
+)
+
+target_link_libraries(mm_2d PRIVATE
+    mgx_dependencies
+)
+
+# ============================================================
+# CUDA device linking
+# ============================================================
+
+set_target_properties(mm_1d mm_2d PROPERTIES
+    CUDA_STANDARD 17
+    CUDA_STANDARD_REQUIRED ON
+    CUDA_SEPARABLE_COMPILATION ON
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
+)
+
+# ============================================================
+# Configuration summary
+# ============================================================
+
+message(STATUS "========================================")
+message(STATUS "MGXBench Build Configuration")
+message(STATUS "========================================")
+message(STATUS "CUDA Architecture : ${CMAKE_CUDA_ARCHITECTURES}")
+message(STATUS "C++ Standard      : ${CMAKE_CXX_STANDARD}")
+message(STATUS "CUDA C++ Standard : ${CMAKE_CUDA_STANDARD}")
+message(STATUS "CUDA Toolkit      : ${CUDAToolkit_VERSION}")
+message(STATUS "MPI CXX Compiler  : ${MPI_CXX_COMPILER}")
+message(STATUS "NCCL Library      : ${NCCL_LIBRARY}")
+message(STATUS "NVSHMEM Host      : ${NVSHMEM_HOST_LIBRARY}")
+message(STATUS "NVSHMEM Device    : ${NVSHMEM_DEVICE_LIBRARY}")
+message(STATUS "========================================")
 
 
