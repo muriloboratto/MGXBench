@@ -1,38 +1,38 @@
-
 <div align="center">
-    <img src="img/logo.png" width="800" style="max-width: 100%;">
-<!-- Technologies -->
-<!-- HPC Features -->
-    <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1-blue?style=flat-square">
-  <img alt="C++ and CUDA" src="https://img.shields.io/badge/C++-CUDA-76B900?style=flat-square">
-  <img alt="Communication" src="https://img.shields.io/badge/communication-MPI%20%7C%20CUDA--Aware%20MPI%20%7C%20NCCL%20%7C%20NVSHMEM-00599C?style=flat-square">
-  <img alt="Visualization" src="https://img.shields.io/badge/plots-Python%20%7C%20Matplotlib-3776AB?style=flat-square">
-  <img alt="HPC" src="https://img.shields.io/badge/computing-HPC-8A2BE2?style=flat-square">
+  <img src="img/logo.png" alt="MGXBench — Multi-GPU Execution Benchmark" width="800">
 
   [![Python CI](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/python-tests.yml)
-[![CMake Validation](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml)
-</p>
-</p>
-
+  [![CMake Validation](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml/badge.svg)](https://github.com/muriloboratto/MGXBench/actions/workflows/cmake-validation.yml)
+  ![Version](https://img.shields.io/badge/version-1.0.0-blue)
+  ![CUDA](https://img.shields.io/badge/C%2B%2B-CUDA-76B900)
+  ![Communication](https://img.shields.io/badge/communication-MPI%20%7C%20NCCL%20%7C%20NVSHMEM-00599C)
+  ![HPC](https://img.shields.io/badge/computing-HPC-8A2BE2)
 </div>
 
-MGXBench is a C++/CUDA benchmark for evaluating the execution performance of distributed matrix multiplication on multiple NVIDIA GPUs. Its current workload compares **1D Row-Block** and **2D Block/SUMMA** decompositions using **MPI, CUDA-aware MPI, NCCL, and NVSHMEM** communication strategies. The benchmark investigates how data distribution, communication mechanisms, and communication–computation overlap affect execution time and throughput.
+# MGXBench: Multi-GPU Execution Benchmark and Communication Performance
+
+[MGXBench](https://github.com/muriloboratto/MGXBench) is a C++/CUDA benchmarking framework for studying and optimizing **distributed dense matrix multiplication across NVIDIA GPUs**. It evaluates how matrix decomposition, communication backends, and communication–computation overlap affect performance on single- and multi-node HPC systems.
+
+MGXBench supports **1D Row-Block** and **2D Block/SUMMA** decomposition, compares seven implementations based on MPI, CUDA-aware MPI, NCCL, and NVSHMEM, and provides a **predictive autotuner** that estimates execution times and selects among previously calibrated configurations without exhaustively running every candidate at the target problem size.
 
 ## Contents
 
-1. [Benchmark design](#benchmark-design)
-2. [Domain decomposition](#domain-decomposition)
-3. [Communication models](#communication-models)
-4. [Communication–computation overlap](#communicationcomputation-overlap)
-5. [Repository structure](#repository-structure)
-6. [Requirements and SDumont environment](#requirements-and-sdumont-environment)
-7. [Installation and compilation](#installation-and-compilation)
-8. [Running MGXBench](#running-mgxbench)
-9. [Outputs and performance metrics](#outputs-and-performance-metrics)
-10. [Validation and interpretation](#validation-and-interpretation)
-11. [Cleaning the build](#cleaning-the-build)
-
+- [Benchmark design](#benchmark-design)
+- [Domain decomposition](#domain-decomposition)
+- [Communication models](#communication-models)
+- [Repository structure](#repository-structure)
+- [Get Started](#-get-started)
+  - [Initialization Modules](#️-initialization-modules)
+  - [Installation](#-installation)
+  - [Running](#️-running)
+    - [1D Row-Block](#1d-row-block)
+    - [2D Block/SUMMA](#2d-blocksumma)
+    - [Main command-line arguments](#main-command-line-arguments)
+  - [Outputs and performance metrics](#-outputs-and-performance-metrics)
+  - [Documentation and tutorials](#documentation-and-tutorials)
+  - [Validation](#-validation)
+  - [Cleaning the build](#-cleaning-the-build)
+  
 ## Benchmark design
 
 MGXBench evaluates two complementary dimensions of distributed GPU execution:
@@ -100,6 +100,7 @@ MGXBench/
 │   └── test_v5_scope.py
 │
 ├── examples/
+├── notebooks/
 ├── img/
 ├── benchmark.py
 ├── CMakeLists.txt
@@ -126,7 +127,14 @@ The `build/` and `results/` directories are created locally and are not required
 
 ### 📦 Installation
 
+MGXBench requires a compatible NVIDIA CUDA toolkit, C++ compiler, CMake, MPI, NCCL, NVSHMEM, and Python environment. On a cluster, load the modules supplied by your site before building. The easiest way to try MGXBench using the following commands:
+
 ```bash
+# get the code
+[username ~]$ git clone https://github.com/muriloboratto/MGXBench.git
+[username ~]$ cd MGXBench
+
+# start the installation
 [username ~]$ bash install.sh
 ```
 
@@ -134,7 +142,7 @@ The `build/` and `results/` directories are created locally and are not required
 
 **Run within a GPU allocation**, following the cluster scheduler's policies. For the examples below, request **four visible GPUs on one node**. The current execution setup associates ranks with GPU indices on the same node.
 
-##### `1D Row-Block` 
+#### `1D Row-Block` 
 
 ```bash
 [username ~]$ python3 benchmark.py \
@@ -142,12 +150,12 @@ The `build/` and `results/` directories are created locally and are not required
               --size 4096 \
               --ranks 4 \
               --libraries MMM YYY CCC XXX NNN WWW SSS \
-              --warmup 2 --repeats 5 \
+              --warmup 2 --repeats 3 \
               --plot \
               --output results/1d
 ```
 
-##### `2D Block/SUMMA`
+#### `2D Block/SUMMA`
 
 ```bash
 [username ~]$ python3 benchmark.py \
@@ -162,7 +170,7 @@ The `build/` and `results/` directories are created locally and are not required
               --output results/2d
 ```
 
-##### Main command-line arguments
+#### Main command-line arguments
 
 | Argument | Purpose |
 |---|---|
@@ -200,6 +208,17 @@ results/sweep-4gpus/
     └── <figures PNG and PDF>
 ```
 
+### 📚 Documentation and tutorials
+
+- **[User Guide](GUIDE.md):** installation, benchmark campaigns, SLURM, profiling, visualization, scaling, and predictive autotuning.
+- **[1D implementation](1D-row-block/README.md):** row-block matrix decomposition and implementation details.
+- **[2D implementation](2D-block-matrix/README.md):** block decomposition and SUMMA execution.
+- **[Notebooks](notebooks/):** sample environment configurations and supporting resources.
+- **[Tests](tests/):** automated workflow and configuration checks.
+
+For hands-on experimentation, follow the command sequences in the user guide within an appropriately allocated HPC environment. GPU/MPI benchmark commands require a compatible cluster; they are not expected to execute on a CPU-only notebook session.
+
+
 ### 🧩 Validation
 
 ```bash
@@ -217,5 +236,5 @@ Remove compiled objects and binaries while retaining the CMake configuration:
 ---
 
 <div align="center">
-  <strong>MGXBench</strong> · Distributed GPU computing · Communication performance · Reproducible benchmarking
+  <strong>MGXBench</strong> · Distributed GPU computing · Communication performance · Predictive Autotuning
 </div>
