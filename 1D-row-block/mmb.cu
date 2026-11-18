@@ -73,6 +73,17 @@
 #include <nvshmem.h>
 #include <nvshmemx.h>
 
+/* Check CUDA allocations and report the failing call explicitly. */
+#define MGX_CUDA_CHECK(call) do { \
+    cudaError_t mgx_err_ = (call); \
+    if (mgx_err_ != cudaSuccess) { \
+        fprintf(stderr, "[MGX rank=%d] CUDA failure %s:%d (%s): %s\n", \
+                myRank, __FILE__, __LINE__, #call, cudaGetErrorString(mgx_err_)); \
+        fflush(stderr); \
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE); \
+    } \
+} while (0)
+
 #define TILE_DIM 32
 #define DEFAULT_PIPELINE_K_CHUNK 2048
 
@@ -389,23 +400,36 @@ int main(int argc, char *argv[])
     double *d_A = NULL, *d_B = NULL, *d_C = NULL;
     double *d_lA = NULL, *d_lC = NULL;
 
-    if (!is_nvshmem_library(libA)) 
+    /* Single-rank optimization: local and global A/C have identical shapes.
+       Alias their device pointers and skip the redundant scatter/gather below.
+       For multiple ranks, retain the original distributed allocations. */
+    const int single_rank_alias = (nRanks == 1);
+
+    if (!is_nvshmem_library(libA))
     {
-        cudaMalloc((void **)&d_A, bytes_A);
-        cudaMalloc((void **)&d_lA, bytes_lA);
+        MGX_CUDA_CHECK(cudaMalloc((void **)&d_A, bytes_A));
+        if (single_rank_alias)
+            d_lA = d_A;
+        else
+            MGX_CUDA_CHECK(cudaMalloc((void **)&d_lA, bytes_lA));
     }
 
     if (!is_nvshmem_library(libB))
-        cudaMalloc((void **)&d_B, bytes_B);
+        MGX_CUDA_CHECK(cudaMalloc((void **)&d_B, bytes_B));
 
-    if (!is_nvshmem_library(libC)) 
+    if (!is_nvshmem_library(libC))
     {
-        cudaMalloc((void **)&d_C, bytes_C);
-        cudaMalloc((void **)&d_lC, bytes_lC);
+        MGX_CUDA_CHECK(cudaMalloc((void **)&d_C, bytes_C));
+        if (single_rank_alias)
+            d_lC = d_C;
+        else
+            MGX_CUDA_CHECK(cudaMalloc((void **)&d_lC, bytes_lC));
     }
 
+
+
     /* ------------------------------------------------------------------ */
-    /* NVSHMEM symmetric buffers: allocate only for operations using 'S'. */
+    /* NVSHMEM symmetric buffers for W/S; W aliases A/C for one rank. */
     /* ------------------------------------------------------------------ */
 
     double *s_A = NULL, *s_B = NULL, *s_C = NULL;
@@ -416,7 +440,12 @@ int main(int argc, char *argv[])
         if (libA == 'W')
             s_A = (double *)nvshmem_malloc(bytes_A);
 
-        s_lA = (double *)nvshmem_malloc(bytes_lA);
+        /* One rank owns the whole matrix: share global/local W storage.
+           S keeps its original local-only symmetric allocation. */
+        if (libA == 'W' && single_rank_alias)
+            s_lA = s_A;
+        else
+            s_lA = (double *)nvshmem_malloc(bytes_lA);
 
         if ((libA == 'W' && !s_A) || !s_lA)
         {
@@ -443,13 +472,28 @@ int main(int argc, char *argv[])
         if (libC == 'W')
             s_C = (double *)nvshmem_malloc(bytes_C);
 
-        s_lC = (double *)nvshmem_malloc(bytes_lC);
+        /* One rank owns the whole matrix: share global/local W storage.
+           S keeps its original local-only symmetric allocation. */
+        if (libC == 'W' && single_rank_alias)
+            s_lC = s_C;
+        else
+            s_lC = (double *)nvshmem_malloc(bytes_lC);
 
         if ((libC == 'W' && !s_C) || !s_lC)
         {
             fprintf(stderr, "NVSHMEM symmetric allocation for C failed on PE %d\n", myPE);
             nvshmem_global_exit(EXIT_FAILURE);
         }
+    }
+
+    if (myRank == 0 && single_rank_alias) {
+        fprintf(stderr,
+                "[MGX] Single-rank A/C aliasing: CUDA and NVSHMEM W supported.\n");
+        if (libA == 'W' && libB == 'W' && libC == 'W')
+            fprintf(stderr,
+                    "[MGX] WWW symmetric matrix payload: %.3f GiB "
+                    "(excludes heap/runtime overhead).\n",
+                    ((double)bytes_A + bytes_B + bytes_C) / 1073741824.0);
     }
 
     /* ------------------------------------------------------------------ */
@@ -482,8 +526,8 @@ int main(int argc, char *argv[])
             SSS_CUDA_CHECK(cudaMalloc((void **)&b_stage[1], stage_bytes));
             SSS_LOG("CUDA stage buffers %p %p bytes=%zu", (void*)b_stage[0], (void*)b_stage[1], stage_bytes);
         } else {
-            cudaMalloc((void **)&b_stage[0], stage_bytes);
-            cudaMalloc((void **)&b_stage[1], stage_bytes);
+            MGX_CUDA_CHECK(cudaMalloc((void **)&b_stage[0], stage_bytes));
+            MGX_CUDA_CHECK(cudaMalloc((void **)&b_stage[1], stage_bytes));
         }
         
         if (libB == 'Y')
@@ -593,7 +637,8 @@ int main(int argc, char *argv[])
         /* A: distribute rows                                               */
         /* ================================================================ */
 
-        switch (libA) 
+        if (!single_rank_alias)
+        switch (libA)
         {
             case 'M':
                 if (myRank == 0)
@@ -822,7 +867,8 @@ int main(int argc, char *argv[])
         /* C: collect partial results                                       */
         /* ================================================================ */
         
-        switch (libC) 
+        if (!single_rank_alias)
+        switch (libC)
         {
             case 'M':
                 cudaMemcpy(lC, d_lC, bytes_lC, cudaMemcpyDeviceToHost);
@@ -950,8 +996,8 @@ int main(int argc, char *argv[])
     if (d_A)  cudaFree(d_A);
     if (d_B)  cudaFree(d_B);
     if (d_C)  cudaFree(d_C);
-    if (d_lA) cudaFree(d_lA);
-    if (d_lC) cudaFree(d_lC);
+    if (d_lA && d_lA != d_A) cudaFree(d_lA);
+    if (d_lC && d_lC != d_C) cudaFree(d_lC);
 
     free(A);
     free(B);
@@ -966,11 +1012,14 @@ int main(int argc, char *argv[])
 
     if (uses_nvshmem) 
     {
-        if (s_A)  nvshmem_free(s_A);
-        if (s_lA) nvshmem_free(s_lA);
-        if (s_B)  nvshmem_free(s_B);
-        if (s_C)  nvshmem_free(s_C);
-        if (s_lC) nvshmem_free(s_lC);
+        /* Each symmetric allocation is freed once, in matching PE order. */
+        if (s_lA && !(libA == 'W' && single_rank_alias))
+            nvshmem_free(s_lA);
+        if (s_A) nvshmem_free(s_A);
+        if (s_B) nvshmem_free(s_B);
+        if (s_lC && !(libC == 'W' && single_rank_alias))
+            nvshmem_free(s_lC);
+        if (s_C) nvshmem_free(s_C);
     }
 
     if (uses_nccl) 
@@ -986,4 +1035,5 @@ int main(int argc, char *argv[])
     
     return all_valid ? 0 : 2;
 }
+
 

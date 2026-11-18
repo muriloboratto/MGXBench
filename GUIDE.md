@@ -124,6 +124,8 @@ Start with a smaller matrix and a few repetitions to verify the entire workflow.
               --decomposition 2d \
               --size 4096 \
               --ranks 4 \
+              --grid-rows 2 \
+              --grid-cols 2 \
               --libraries MMM YYY CCC XXX NNN WWW SSS \
               --warmup 2 \
               --repeats 3 \
@@ -244,7 +246,8 @@ By default, a campaign includes both decompositions, rank counts of $1$ and $4$,
               --sizes 8192 \
               --ranks 1 4 \
               --libraries MMM YYY CCC XXX NNN WWW SSS \
-              --warmup 2 --repeats 3 \
+              --warmup 2 \
+              --repeats 3 \
               --output results/strong \
               --label strong-N8192
 ```
@@ -269,7 +272,8 @@ The runner aligns the theoretical size to the nearest valid multiple using
               --decompositions 1d  \
               --size-alignment 4 \
               --libraries MMM NNN SSS  \
-              --warmup 1 --repeats 2 \
+              --warmup 2 \ 
+              --repeats 3 \
               --output results/weak \
               --label weak-N4096
 ```
@@ -324,7 +328,7 @@ for SIZE in 4096 8192 16384; do
         --warmup 1 \
         --repeats 2 \
         --plot \
-        --output results/1d
+        --output results/8GPUs/1d
 done
 
 # 2D SUMMA, explicit rectangular 2 x 4 process grid.
@@ -341,7 +345,7 @@ for SIZE in 4096 8192 16384; do
         --warmup 1 \
         --repeats 2 \
         --plot \
-        --output results/2d
+        --output results/8GPUs/2d
 done
 ```
 
@@ -649,7 +653,7 @@ Run this only after collecting independent validation results, because feedback 
               --decomposition 2d \
               --ranks 4 \
               --sizes 2048 4096 6144 8192 12288 \
-              --grids 2x2 \
+              --grids 1x4 2x2 4x1\
               --bks 128 256 \
               --libraries MMM YYY CCC XXX NNN WWW SSS \
               --warmup 2 \
@@ -728,7 +732,6 @@ This command tests **BK=128 only**. To establish ground truth across both calibr
               --repeats 3 \
               --output results/ground_truth_2d_16384_bk128
 ```
-
 
 #### 12.3.5 Adaptive feedback
 

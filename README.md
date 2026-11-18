@@ -154,6 +154,8 @@ The `build/` and `results/` directories are created locally and are not required
               --decomposition 2d \
               --size 4096 \
               --ranks 4 \
+              --grid-rows 2 \
+              --grid-cols 2 \
               --libraries MMM YYY CCC XXX NNN WWW SSS \
               --warmup 2 --repeats 3 \
               --plot \
@@ -167,6 +169,8 @@ The `build/` and `results/` directories are created locally and are not required
 | `--decomposition` | Select `1d` or `2d` |
 | `--size` | Matrix dimension **N** (for an N × N problem) |
 | `--ranks` | Number of MPI ranks / participating GPUs |
+| `--grid-rows` | Specifies the number of process rows in the 2D grid |
+| `--grid-cols` | Specifies the number of process columns in the 2D grid |
 | `--libraries` | Communication implementations to evaluate; use `AUTO` alone for prediction |
 | `--prediction-model` | With `AUTO`: `extrapolation` (default), `ml` (Ridge), or `auto` |
 | `--grid-rows`, `--grid-cols` | Explicit SUMMA grid; with `AUTO`, restrict the candidate grid |

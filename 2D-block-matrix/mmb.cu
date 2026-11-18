@@ -1,6 +1,7 @@
 /* MGXBench: rectangular 2D SUMMA with two panel buffers.
  * The communication of panel k+1 may overlap the computation of panel k.
- * No CHECK_CUDA / CHECK_NCCL macros, as requested.
+ * Memory-efficient local validation; checked CUDA calls.
+ * FP64, SUMMA panel pipeline and timing boundaries are preserved.
  */
 #include <mpi.h>
 #include <cuda_runtime.h>
@@ -11,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <cmath>
 #include <limits.h>
 #include <vector>
 #include <algorithm>
@@ -29,6 +31,15 @@ static int env_int(const char *name, int fallback) {
 static void fail(const char *message, int rank) {
     if (rank == 0) fprintf(stderr, "2D SUMMA: %s\n", message);
     MPI_Abort(MPI_COMM_WORLD, 2);
+}
+
+static void cuda_check(cudaError_t status, const char *operation, int rank) {
+    if (status != cudaSuccess) {
+        fprintf(stderr, "Rank %d: %s failed: %s\n",
+                rank, operation, cudaGetErrorString(status));
+        fflush(stderr);
+        MPI_Abort(MPI_COMM_WORLD, 2);
+    }
 }
 
 static void grid_shape(int p, int *pr, int *pc) {
@@ -58,15 +69,6 @@ static void pack_a(const double *src, double *dst, int N, int m,
 static void pack_b(const double *src, double *dst, int n,
                    int start, int k) {
     memcpy(dst, src + (size_t)start * n, (size_t)k * n * sizeof(double));
-}
-
-static void unpack_c(double *dst, const double *src, int N,
-                     int m, int n, int r, int c) {
-    for (int i = 0; i < m; ++i) {
-        memcpy(dst + (size_t)(r * m + i) * N + c * n,
-               src + (size_t)i * n,
-               (size_t)n * sizeof(double));
-    }
 }
 
 int main(int argc, char **argv) {
@@ -119,12 +121,12 @@ int main(int argc, char **argv) {
 
     int local_rank = 0, device_count = 0;
     MPI_Comm_rank(local_comm, &local_rank);
-    cudaGetDeviceCount(&device_count);
+    cuda_check(cudaGetDeviceCount(&device_count), "cudaGetDeviceCount", rank);
     int dev = !strcmp(argv[1], "auto")
                   ? (device_count == 1 ? 0 : local_rank)
                   : atoi(argv[1]);
     if (dev < 0 || dev >= device_count) fail("GPU device mapping invalid", rank);
-    cudaSetDevice(dev);
+    cuda_check(cudaSetDevice(dev), "cudaSetDevice", rank);
     MPI_Comm_free(&local_comm);
 
     bool nv = !strcmp(lib, "WWW") || !strcmp(lib, "SSS");
@@ -158,6 +160,20 @@ int main(int argc, char **argv) {
     size_t bbytes = bcap * sizeof(double);
     size_t cbytes = csize * sizeof(double);
 
+    if (rank == 0) {
+        const double gib = 1073741824.0;
+        const size_t panel_bytes = abytes + bbytes;
+        printf("2D explicit device buffers per rank: %.6f GiB "
+               "(C + panels; excludes runtime/heap reservation)\n",
+               (cbytes + (nv ? 3.0 : 2.0) * panel_bytes) / gib);
+        if (nv) {
+            const char *heap = getenv("NVSHMEM_SYMMETRIC_SIZE");
+            printf("NVSHMEM symmetric panel payload per rank: %.6f GiB; "
+                   "NVSHMEM_SYMMETRIC_SIZE=%s\n",
+                   3.0 * panel_bytes / gib, heap ? heap : "<runtime default>");
+        }
+    }
+
     double *dC = nullptr;
     double *dA[2] = {nullptr, nullptr};
     double *dB[2] = {nullptr, nullptr};
@@ -166,8 +182,8 @@ int main(int argc, char **argv) {
     double *hA[2] = {nullptr, nullptr};
     double *hB[2] = {nullptr, nullptr};
 
-    cudaMalloc((void **)&dC, cbytes);
-    cudaMemset(dC, 0, cbytes);
+    cuda_check(cudaMalloc((void **)&dC, cbytes), "cudaMalloc", rank);
+    cuda_check(cudaMemset(dC, 0, cbytes), "cudaMemset", rank);
 
     if (nv) {
         // Symmetric allocation order must match across all PEs.
@@ -182,25 +198,25 @@ int main(int argc, char **argv) {
         }
     } else {
         for (int i = 0; i < 2; ++i) {
-            cudaMalloc((void **)&dA[i], abytes);
-            cudaMalloc((void **)&dB[i], bbytes);
+            cuda_check(cudaMalloc((void **)&dA[i], abytes), "cudaMalloc", rank);
+            cuda_check(cudaMalloc((void **)&dB[i], bbytes), "cudaMalloc", rank);
         }
     }
 
     // Page-locked host buffers support genuinely asynchronous H2D copies.
     for (int i = 0; i < 2; ++i) {
-        cudaMallocHost((void **)&hA[i], abytes);
-        cudaMallocHost((void **)&hB[i], bbytes);
+        cuda_check(cudaMallocHost((void **)&hA[i], abytes), "cudaMallocHost", rank);
+        cuda_check(cudaMallocHost((void **)&hB[i], bbytes), "cudaMallocHost", rank);
     }
 
     cudaStream_t computeStream, transferStream;
-    cudaStreamCreateWithFlags(&computeStream, cudaStreamNonBlocking);
-    cudaStreamCreateWithFlags(&transferStream, cudaStreamNonBlocking);
+    cuda_check(cudaStreamCreateWithFlags(&computeStream, cudaStreamNonBlocking), "cudaStreamCreateWithFlags", rank);
+    cuda_check(cudaStreamCreateWithFlags(&transferStream, cudaStreamNonBlocking), "cudaStreamCreateWithFlags", rank);
 
     cudaEvent_t panelReady[2], computeDone[2];
     for (int i = 0; i < 2; ++i) {
-        cudaEventCreateWithFlags(&panelReady[i], cudaEventDisableTiming);
-        cudaEventCreateWithFlags(&computeDone[i], cudaEventDisableTiming);
+        cuda_check(cudaEventCreateWithFlags(&panelReady[i], cudaEventDisableTiming), "cudaEventCreateWithFlags", rank);
+        cuda_check(cudaEventCreateWithFlags(&computeDone[i], cudaEventDisableTiming), "cudaEventCreateWithFlags", rank);
     }
 
     ncclComm_t nccl_row, nccl_col;
@@ -216,7 +232,7 @@ int main(int argc, char **argv) {
         ncclGroupEnd();
     }
 
-    cudaDeviceSynchronize();
+    cuda_check(cudaDeviceSynchronize(), "cudaDeviceSynchronize", rank);
     MPI_Barrier(MPI_COMM_WORLD);
     double t0 = MPI_Wtime();
 
@@ -233,7 +249,7 @@ int main(int argc, char **argv) {
         // The previous panel can continue computing while the CPU
         // prepares/communicates this panel in the other buffer.
         if (iteration >= 2) {
-            cudaEventSynchronize(computeDone[current]);
+            cuda_check(cudaEventSynchronize(computeDone[current]), "cudaEventSynchronize", rank);
         }
 
         // NVSHMEM uses a single shared source panel per PE. Before any PE
@@ -241,7 +257,7 @@ int main(int argc, char **argv) {
         // from the previous panel. This barrier is conservative and limits
         // NVSHMEM overlap; a fully pipelined variant needs two source panels.
         if (nv && iteration > 0) {
-            cudaEventSynchronize(computeDone[1 - current]);
+            cuda_check(cudaEventSynchronize(computeDone[1 - current]), "cudaEventSynchronize", rank);
             nvshmem_barrier_all();
         }
 
@@ -262,17 +278,17 @@ int main(int argc, char **argv) {
                 MPI_Bcast(hB[current], kc * n, MPI_DOUBLE, 0, col_comm);
             }
 
-            cudaMemcpyAsync(dA[current], hA[current], ab,
-                            cudaMemcpyHostToDevice, transferStream);
-            cudaMemcpyAsync(dB[current], hB[current], bb,
-                            cudaMemcpyHostToDevice, transferStream);
+            cuda_check(cudaMemcpyAsync(dA[current], hA[current], ab,
+                            cudaMemcpyHostToDevice, transferStream), "cudaMemcpyAsync", rank);
+            cuda_check(cudaMemcpyAsync(dB[current], hB[current], bb,
+                            cudaMemcpyHostToDevice, transferStream), "cudaMemcpyAsync", rank);
 
         } else if (nv) {
             if (cc == 0) {
-                cudaMemcpy(sA, hA[current], ab, cudaMemcpyHostToDevice);
+                cuda_check(cudaMemcpy(sA, hA[current], ab, cudaMemcpyHostToDevice), "cudaMemcpy", rank);
             }
             if (rr == 0) {
-                cudaMemcpy(sB, hB[current], bb, cudaMemcpyHostToDevice);
+                cuda_check(cudaMemcpy(sB, hB[current], bb, cudaMemcpyHostToDevice), "cudaMemcpy", rank);
             }
 
             nvshmem_barrier_all();
@@ -292,12 +308,12 @@ int main(int argc, char **argv) {
 
         } else if (nc) {
             if (cc == 0) {
-                cudaMemcpyAsync(dA[current], hA[current], ab,
-                                cudaMemcpyHostToDevice, transferStream);
+                cuda_check(cudaMemcpyAsync(dA[current], hA[current], ab,
+                                cudaMemcpyHostToDevice, transferStream), "cudaMemcpyAsync", rank);
             }
             if (rr == 0) {
-                cudaMemcpyAsync(dB[current], hB[current], bb,
-                                cudaMemcpyHostToDevice, transferStream);
+                cuda_check(cudaMemcpyAsync(dB[current], hB[current], bb,
+                                cudaMemcpyHostToDevice, transferStream), "cudaMemcpyAsync", rank);
             }
 
             ncclGroupStart();
@@ -310,14 +326,14 @@ int main(int argc, char **argv) {
         } else {
             // CUDA-aware MPI: root H2D must finish before MPI accesses dA/dB.
             if (cc == 0) {
-                cudaMemcpyAsync(dA[current], hA[current], ab,
-                                cudaMemcpyHostToDevice, transferStream);
+                cuda_check(cudaMemcpyAsync(dA[current], hA[current], ab,
+                                cudaMemcpyHostToDevice, transferStream), "cudaMemcpyAsync", rank);
             }
             if (rr == 0) {
-                cudaMemcpyAsync(dB[current], hB[current], bb,
-                                cudaMemcpyHostToDevice, transferStream);
+                cuda_check(cudaMemcpyAsync(dB[current], hB[current], bb,
+                                cudaMemcpyHostToDevice, transferStream), "cudaMemcpyAsync", rank);
             }
-            if (cc == 0 || rr == 0) cudaStreamSynchronize(transferStream);
+            if (cc == 0 || rr == 0) cuda_check(cudaStreamSynchronize(transferStream), "cudaStreamSynchronize", rank);
 
             MPI_Request ra = MPI_REQUEST_NULL;
             MPI_Request rb = MPI_REQUEST_NULL;
@@ -334,18 +350,18 @@ int main(int argc, char **argv) {
 
         // For MPI paths the operations above have completed on the CPU;
         // for NCCL/NVSHMEM the transfer stream tracks their completion.
-        cudaEventRecord(panelReady[current], transferStream);
-        cudaStreamWaitEvent(computeStream, panelReady[current], 0);
+        cuda_check(cudaEventRecord(panelReady[current], transferStream), "cudaEventRecord", rank);
+        cuda_check(cudaStreamWaitEvent(computeStream, panelReady[current], 0), "cudaStreamWaitEvent", rank);
 
         ABMultiplyAccumulateAsync(dA[current], dB[current], dC,
                                   m, n, kc, 0, kc, kc, n, n,
                                   TILE_DIM, computeStream);
-        cudaGetLastError();
-        cudaEventRecord(computeDone[current], computeStream);
+        cuda_check(cudaGetLastError(), "cudaGetLastError", rank);
+        cuda_check(cudaEventRecord(computeDone[current], computeStream), "cudaEventRecord", rank);
     }
 
     // One completion wait after the last panel, not after every kernel.
-    cudaStreamSynchronize(computeStream);
+    cuda_check(cudaStreamSynchronize(computeStream), "cudaStreamSynchronize", rank);
     if (nv) nvshmem_barrier_all();
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -354,34 +370,31 @@ int main(int argc, char **argv) {
     MPI_Reduce(&local_elapsed, &elapsed, 1, MPI_DOUBLE, MPI_MAX,
                0, MPI_COMM_WORLD);
 
+    // Release input storage before allocating the host validation block.
+    std::vector<double>().swap(Arow);
+    std::vector<double>().swap(Bcol);
+
+    // Validate every local element without gathering a full global matrix.
     std::vector<double> localC(csize);
-    cudaMemcpy(localC.data(), dC, cbytes, cudaMemcpyDeviceToHost);
-    std::vector<double> globalC(rank == 0 ? (size_t)N * N : 0);
-
-    if (rank == 0) {
-        unpack_c(globalC.data(), localC.data(), N, m, n, rr, cc);
-        std::vector<double> tmp(csize);
-        for (int r = 1; r < p; ++r) {
-            MPI_Recv(tmp.data(), (int)csize, MPI_DOUBLE, r, 901,
-                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            unpack_c(globalC.data(), tmp.data(), N, m, n, r / Pc, r % Pc);
+    cuda_check(cudaMemcpy(localC.data(), dC, cbytes, cudaMemcpyDeviceToHost), "cudaMemcpy", rank);
+    int local_valid = 1;
+    const double expected = 2.0 * N;
+    const double tolerance = 1e-9 + 1e-12 * fabs(expected);
+    for (size_t i = 0; i < localC.size(); ++i) {
+        const double value = localC[i];
+        if (!std::isfinite(value) || fabs(value - expected) > tolerance) {
+            fprintf(stderr,
+                    "Rank %d: 2D validation failed at local index=%zu: "
+                    "got %.17g expected %.17g\n",
+                    rank, i, value, expected);
+            local_valid = 0;
+            break;
         }
-    } else {
-        MPI_Send(localC.data(), (int)csize, MPI_DOUBLE, 0, 901, MPI_COMM_WORLD);
     }
-
-    int valid = 1;
+    int valid = 0;
+    MPI_Allreduce(&local_valid, &valid, 1, MPI_INT,
+                  MPI_MIN, MPI_COMM_WORLD);
     if (rank == 0) {
-        for (size_t i = 0; i < globalC.size(); ++i) {
-            double expected = 2.0 * N;
-            if (fabs(globalC[i] - expected) > 1e-9 + 1e-12 * fabs(expected)) {
-                fprintf(stderr,
-                        "2D validation failed at index=%zu: got %.17g expected %.17g\n",
-                        i, globalC[i], expected);
-                valid = 0;
-                break;
-            }
-        }
         printf("BENCHMARK_RESULT decomposition=2D library=%s size=%d ranks=%d seconds=%.9f valid=%d loops=1 grid=%dx%d\n",
                lib, N, p, elapsed, valid, Pr, Pc);
         fflush(stdout);
@@ -393,11 +406,11 @@ int main(int argc, char **argv) {
     }
 
     for (int i = 0; i < 2; ++i) {
-        cudaEventDestroy(panelReady[i]);
-        cudaEventDestroy(computeDone[i]);
+        cuda_check(cudaEventDestroy(panelReady[i]), "cudaEventDestroy", rank);
+        cuda_check(cudaEventDestroy(computeDone[i]), "cudaEventDestroy", rank);
     }
-    cudaStreamDestroy(computeStream);
-    cudaStreamDestroy(transferStream);
+    cuda_check(cudaStreamDestroy(computeStream), "cudaStreamDestroy", rank);
+    cuda_check(cudaStreamDestroy(transferStream), "cudaStreamDestroy", rank);
 
     if (nv) {
         nvshmem_barrier_all();
@@ -409,15 +422,15 @@ int main(int argc, char **argv) {
         nvshmem_free(sB);
     } else {
         for (int i = 0; i < 2; ++i) {
-            cudaFree(dA[i]);
-            cudaFree(dB[i]);
+            cuda_check(cudaFree(dA[i]), "cudaFree", rank);
+            cuda_check(cudaFree(dB[i]), "cudaFree", rank);
         }
     }
     for (int i = 0; i < 2; ++i) {
-        cudaFreeHost(hA[i]);
-        cudaFreeHost(hB[i]);
+        cuda_check(cudaFreeHost(hA[i]), "cudaFreeHost", rank);
+        cuda_check(cudaFreeHost(hB[i]), "cudaFreeHost", rank);
     }
-    cudaFree(dC);
+    cuda_check(cudaFree(dC), "cudaFree", rank);
     if (nv) nvshmem_finalize();
 
     MPI_Comm_free(&row_comm);
@@ -425,3 +438,4 @@ int main(int argc, char **argv) {
     MPI_Finalize();
     return valid ? 0 : 1;
 }
+
