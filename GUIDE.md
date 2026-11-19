@@ -26,7 +26,7 @@ MGXBench compares two matrix-multiplication decomposition strategies: **1D Row-B
 | Code | Communication model |
 |---|---|
 | `MMM` | MPI-SYNC |
-| `YYY` | MPI-CHUNKED-ASYNC |
+| `YYY` | MPI-ASYNC |
 | `CCC` | CUDA-AWARE-SYNC |
 | `XXX` | CUDA-AWARE-ASYNC |
 | `NNN` | NCCL-ASYNC |

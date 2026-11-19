@@ -9,9 +9,9 @@
   ![HPC](https://img.shields.io/badge/computing-HPC-8A2BE2)
 </div>
 
-# MGXBench: Multi-GPU Execution Benchmark and Communication Performance
+# Multi-GPU Execution Benchmark and Communication Performance
 
-[MGXBench](https://github.com/muriloboratto/MGXBench) is a C++/CUDA benchmarking framework for studying and optimizing **distributed dense matrix multiplication across NVIDIA GPUs**. It evaluates how matrix decomposition, communication backends, and communication–computation overlap affect performance on single- and multi-node HPC systems.
+MGXBench is a C++/CUDA benchmarking framework for studying and optimizing **distributed dense matrix multiplication across NVIDIA GPUs**. It evaluates how matrix decomposition, communication backends, and communication–computation overlap affect performance on single- and multi-node HPC systems.
 
 MGXBench supports **1D Row-Block** and **2D Block/SUMMA** decomposition, compares seven implementations based on MPI, CUDA-aware MPI, NCCL, and NVSHMEM, and provides a **predictive autotuner** that estimates execution times and selects among previously calibrated configurations without exhaustively running every candidate at the target problem size.
 
