@@ -67,17 +67,11 @@ It is recommended to consult these commands before running experiments to verify
 
 ### 2.2 Prepare the cluster build and runtime environment
 
-Building requires compatible versions of CMake, a C++ compiler, CUDA, MPI, NCCL, and NVSHMEM. Check the following in the same environment:
+Building requires compatible versions of CMake, a C++ compiler, CUDA, MPI, NCCL, and NVSHMEM.  The following examples illustrate the module configurations used on two HPC systems: **SDumont (LNCC, Brazil)** and **JUPITER (JSC, Germany)**.
 
-```bash
-[username ~]$ python3 --version
-[username ~]$ cmake --version
-[username ~]$ nvcc --version
-[username ~]$ mpicxx --version
-[username ~]$ mpirun --version
-[username ~]$ nvidia-smi
-```
-Example module configuration for a specific environment (module names and versions may vary across clusters):
+**Module names, versions, and dependencies are environment-specific and may vary across HPC clusters**, depending on how software packages are installed, organized, and managed by the system administrators.
+
+#### SDumont (LNCC, Brazil)
 
 ```bash
 [username ~]$ module load anaconda3/2020.07_sequana
@@ -89,13 +83,34 @@ Example module configuration for a specific environment (module names and versio
 [username ~]$ module load nccl/2.13_cuda-11.2_sequana
 ```
 
+#### JUPITER (JSC, Germany)
+
+```bash
+[username ~]$ module load Stages/2026
+[username ~]$ module load GCC/14.3.0
+[username ~]$ module load OpenMPI/5.0.8
+[username ~]$ module load NVSHMEM/3.3.20-CUDA-13
+[username ~]$ module load CMake/3.31.8
+```
+
+**Note:** These configurations are provided as examples and should not be considered universal. Users must adapt the module commands to their target HPC environment, taking into account the available software stack, module hierarchy, package versions, and dependencies.
+
+To inspect the available modules on a given cluster, use:
+
+```bash
+[username ~]$ module avail
+[username ~]$ module spider <package_name>
+[username ~]$ module list
+```
+
+
 After loading the required modules, build the benchmark:
 
 ```bash
 [username ~]$ bash install.sh
 ```
 
-The documented installer expects the static library `$NVSHMEM_HOME/lib/libnvshmem.a`. Before building, make sure `NVSHMEM_HOME` is set and the file exists. The installer's default CUDA architecture is `70`. For a different architecture, set `CUDA_ARCH` to match the target GPU. The `--clean` option removes the build directory before rebuilding; use it only when a clean rebuild is needed.
+The documented installer expects the static library `$NVSHMEM_HOME/lib/libnvshmem.a`. Before building, make sure `NVSHMEM_HOME` is set and the file exists. 
 
 
 <a id="first-benchmark"></a>
@@ -185,9 +200,9 @@ Previous runs are preserved. Logs also record warm-up runs; failures are recorde
 | `median_s` | Median sample time |
 | `p95_s` | 95th percentile of execution times |
 | `stddev_s` | Population standard deviation |
-| `cv_pct` | Relative dispersion: 100 × standard deviation / mean |
+| `cv_pct` | Relative dispersion |
 | `ci95_low_s`, `ci95_high_s` | Bounds of a bootstrap confidence interval for the mean |
-| `gflops` | Effective throughput: 2N³ / (mean time × 10⁹) |
+| `gflops` | Effective throughput |
 | `speedup_vs_MMM` | Mean execution time of MMM divided by that of the model |
 | `validated` | Indicates successful numerical validation |
 | `original_inner_loops` | Number of inner iterations per launch |
@@ -213,8 +228,6 @@ This command runs the five specified matrix sizes, seven models, and two decompo
               --output results/sweep-4gpus \
               --label sweep-4gpus
 ```
-
-To benchmark only 1D, use `--decompositions 1d`. To select specific models, for example, use `--libraries MMM NNN SSS`. Include MMM when you need speedup relative to MPI-SYNC.
 
 ### 5.2 What happens when the campaign finishes
 
@@ -609,7 +622,7 @@ Build MGXBench first, then run from the project root within a GPU allocation. Us
 
 #### 12.2.5 Adaptive feedback with power-law extrapolation
 
-Run this only after collecting independent validation results, because feedback may add N=16384 to the training set.
+Run this only after collecting independent validation results, because feedback may add N=$16384$ to the training set.
 
 ```bash
 [username ~]$ python3 benchmark.py \
@@ -875,24 +888,7 @@ $$
 \log \widehat{T}_c(N)=b_c+w_c\log(N/N_{\mathrm{ref}}).
 $$
 
-Adding a new measured `(N, T)` observation changes the training set. Upon refitting, the candidate coefficients may change, modifying future time estimates and potentially the selected library/grid/BK.  Illustrative example:
-
-| Quantity | Example |
-|---|---:|
-| Predicted time at N=16384 | 0.75 s |
-| Observed median | 0.90 s |
-| Absolute percentage error | 16.67% |
-| New training observation | N=16384, T=0.90 s, selected candidate |
-
-The error is $100|\widehat T-T|/T$. After feedback, do **not** evaluate model generalization on the same observation that has just been added to training. Use a held-out size or candidate, and preserve the pre-feedback prediction for comparison.
-
-### 12.9 Verification checklist
-
-1. `python3 benchmark.py --help` lists both flags.
-2. `--auto-validate` actually executes and measures the selected candidate (rather than only producing `PREDICTED`).
-3. `--auto-feedback` persists a validated observation for the **correct candidate** in the correct calibration file.
-4. A subsequent `--prediction-model ml` invocation reads that file and refits Ridge; compare predictions before/after on a held-out N.
-5. If the file is unchanged, do not report that the model was updated. Inspect the implementation/logs instead.
+Adding a new measured `(N, T)` observation changes the training set. Upon refitting, the candidate coefficients may change, modifying future time estimates and potentially the selected library/grid/BK.  
 
 ---
 
