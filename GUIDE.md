@@ -30,7 +30,7 @@ MGXBench compares two matrix-multiplication decomposition strategies: **1D Row-B
 | `CCC` | CUDA-AWARE-SYNC |
 | `XXX` | CUDA-AWARE-ASYNC |
 | `NNN` | NCCL-ASYNC |
-| `WWW` | NVSHMEM-CHUNKED-SYNC |
+| `WWW` | NVSHMEM-SYNC |
 | `SSS` | NVSHMEM-ASYNC |
 
 The *asynchronous* labels describe the implemented strategy; they do not, by themselves, guarantee effective overlap between communication and computation. Such overlap must be verified through timeline-based profiling.
