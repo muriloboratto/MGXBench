@@ -213,7 +213,6 @@ results/sweep-4gpus/
 - **[User Guide](GUIDE.md):** installation, benchmark campaigns, SLURM, profiling, visualization, scaling, and predictive autotuning.
 - **[1D implementation](1D-row-block/README.md):** row-block matrix decomposition and implementation details.
 - **[2D implementation](2D-block-matrix/README.md):** block decomposition and SUMMA execution.
-- **[Notebooks](notebooks/):** sample environment configurations and supporting resources.
 - **[Tests](tests/):** automated workflow and configuration checks.
 
 For hands-on experimentation, follow the command sequences in the user guide within an appropriately allocated HPC environment. GPU/MPI benchmark commands require a compatible cluster; they are not expected to execute on a CPU-only notebook session.
