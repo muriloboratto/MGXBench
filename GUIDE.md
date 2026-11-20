@@ -29,7 +29,7 @@ MGXBench compares two matrix-multiplication decomposition strategies: **1D Row-B
 | `YYY` | MPI-ASYNC |
 | `CCC` | CUDA-AWARE-SYNC |
 | `XXX` | CUDA-AWARE-ASYNC |
-| `NNN` | NCCL-ASYNC |
+| `NNN` | NCCL |
 | `WWW` | NVSHMEM-SYNC |
 | `SSS` | NVSHMEM-ASYNC |
 
