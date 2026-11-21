@@ -52,7 +52,7 @@ The workload is dense matrix multiplication, $C = A × B$, with square matrices 
 
 The benchmark exposes the following library identifiers through `--libraries`:
 
-| ID | Model | Main communication mechanism | Chunking | Intended overlap |
+| Code | Model | Main communication mechanism | Chunking | Intended overlap |
 |:--:|---|---|---|---|
 | `MMM` | **MPI-SYNC** | Blocking `MPI_Bcast` via host buffers | No | None |
 | `YYY` | **MPI-ASYNC** | `MPI_Ibcast`, pinned host buffers, asynchronous host-to-device transfers | A and B | Communication / H2D / GEMM pipeline |
