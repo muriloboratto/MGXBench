@@ -10,3 +10,5 @@ __pycache__/
 __MACOSX/
 _bk1/
 _experimental_results
+.agents/
+_paper/
